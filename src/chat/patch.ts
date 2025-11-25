@@ -26,7 +26,6 @@ import {
   isLidMigrated,
   isUnreadTypeMsg,
   mediaTypeFromProtobuf,
-  shouldHaveAccountLid,
   toUserLid,
   typeAttributeFromProtobuf,
 } from '../whatsapp/functions';
@@ -119,7 +118,7 @@ function applyPatch() {
   });
 
   wrapModuleFunction(findChat, async (func, ...args) => {
-    const [chatId] = args;
+    const [chatId, context] = args;
 
     if (!chatId.isLid()) {
       return await func(...args);
@@ -128,6 +127,23 @@ function applyPatch() {
     const contact = ContactStore.get(chatId);
     const existingChat = await getExisting(chatId);
     if (!existingChat && contact) {
+      // WhatsApp Web logic: For username_contactless_search context, prefer phone number if available
+      // This prevents duplicate chats (one with LID, one with phone number)
+      const VALID_USERNAME_ORIGINS = new Set([
+        'username_change_notification',
+        'username_contactless_search',
+      ]);
+      const phoneNumberWid = ApiContact.getPhoneNumber(chatId);
+      const shouldUsePhoneNumber =
+        VALID_USERNAME_ORIGINS.has(context) && phoneNumberWid != null;
+
+      if (shouldUsePhoneNumber) {
+        // Use the phone number WID to create/find the chat
+        // Call findChat with the phone number instead of LID
+        return await findChat(phoneNumberWid, context);
+      }
+
+      // Create with LID for other contexts
       const chatParams: any = { chatId };
       await createChat(
         chatParams,
@@ -153,8 +169,6 @@ function applyPatch() {
       return UserWid;
     }
   });
-
-  wrapModuleFunction(shouldHaveAccountLid, () => false);
 
   wrapModuleFunction(isLidMigrated, (func, ...args) => {
     try {
