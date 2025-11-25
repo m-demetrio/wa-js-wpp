@@ -28,9 +28,12 @@ export function fetchDataFromPNG(url: string): Promise<Uint8Array> {
       canvas.width = img.naturalWidth;
       ctx.drawImage(img, 0, 0);
 
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-      const buffer = Buffer.from(data.filter((_, i) => i % 4 < 3)); // Skip alfa color
+    const rgbBytes = new Uint8Array(
+      Array.from(data).filter((_, i) => i % 4 < 3)
+    ); // Skip alfa color
+    const buffer = Buffer.from(rgbBytes);
 
       // Get the image size
       const size =
