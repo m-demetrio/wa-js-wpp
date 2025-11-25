@@ -29,7 +29,7 @@ import {
   toUserLid,
   typeAttributeFromProtobuf,
 } from '../whatsapp/functions';
-import { ApiContact } from '../whatsapp/misc';
+import { resolveChatLid } from './helpers/resolveChatLid';
 
 webpack.onFullReady(applyPatch, 1000);
 webpack.onFullReady(applyPatchModel);
@@ -91,6 +91,15 @@ function applyPatch() {
   });
 
   wrapModuleFunction(createChatRecord, async (func, ...args) => {
+    const [chatId, chatRecord] = args as [ChatModel['id'], any];
+
+    if (chatRecord && !chatRecord.accountLid && chatId?.isUser?.()) {
+      const lid = await resolveChatLid(chatId);
+      if (lid) {
+        chatRecord.accountLid = lid._serialized;
+      }
+    }
+
     const maxAttempts = 5;
     let delay = 1000;
 
