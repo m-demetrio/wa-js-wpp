@@ -1,5 +1,5 @@
 /*!
- * Copyright 2021 WPPConnect Team
+ * Copyright 2022 WPPConnect Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,5 @@
  * limitations under the License.
  */
 
-import { exportModule } from '../exportModule';
-import { StreamModel } from '../models';
-
-/** @whatsapp 8080
- * @whatsapp 608080 >= 2.2222.8
- */
-export declare const Stream: StreamModel;
-
-exportModule(
-  exports,
-  { Stream: 'Stream' },
-  (m) => m.Stream || m.default?.Stream || m.default?.openStream
-);
+export * from './ensureChat';
+export * from './resolveChatLid';
