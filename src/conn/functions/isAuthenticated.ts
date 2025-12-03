@@ -17,5 +17,21 @@
 import * as wa_functions from '../../whatsapp/functions';
 
 export function isAuthenticated(): boolean {
-  return wa_functions.isAuthenticated();
+  const fn = wa_functions.isAuthenticated;
+
+  if (typeof fn === 'function') {
+    return fn();
+  }
+
+  const conn: any = (wa_functions as any).Conn || (window as any)?.Store?.Conn;
+
+  if (conn?.isAuthenticated) {
+    return conn.isAuthenticated();
+  }
+
+  if (conn?.isLoggedIn) {
+    return conn.isLoggedIn();
+  }
+
+  return false;
 }

@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-import { assertGetChat, assertWid } from '../../assert';
+import { assertWid } from '../../assert';
 import { Wid } from '../../whatsapp';
 import { sendClear } from '../../whatsapp/functions';
+import { ensureChat } from '../helpers';
 
 /**
  * Clear a chat message
@@ -26,7 +27,7 @@ import { sendClear } from '../../whatsapp/functions';
 export async function clear(chatId: string | Wid, keepStarred = true) {
   const wid = assertWid(chatId);
 
-  const chat = assertGetChat(wid);
+  const chat = await ensureChat(wid);
 
   sendClear(chat, keepStarred);
 
