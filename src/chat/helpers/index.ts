@@ -1,5 +1,5 @@
 /*!
- * Copyright 2021 WPPConnect Team
+ * Copyright 2022 WPPConnect Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,5 @@
  * limitations under the License.
  */
 
-import { ChatPresence, Wid } from '../../whatsapp';
-import { ensureChat } from '../helpers';
-
-/**
- * Mark a chat is paused state
- *
- * @example
- * ```javascript
- * // Mark as recording
- * WPP.chat.markIsPaused('[number]@c.us');
- * ```
- * @category Chat
- */
-export async function markIsPaused(chatId: string | Wid) {
-  const chat = await ensureChat(chatId);
-
-  await chat.presence.subscribe();
-
-  await ChatPresence.markPaused(chat);
-}
+export * from './ensureChat';
+export * from './resolveChatLid';

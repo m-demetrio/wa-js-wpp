@@ -16,10 +16,11 @@
 
 import { compare } from 'compare-versions';
 
-import { assertGetChat, assertWid } from '../../assert';
+import { assertWid } from '../../assert';
 import { WPPError } from '../../util';
 import { Cmd, Wid } from '../../whatsapp';
 import { setArchive } from '../../whatsapp/functions';
+import { ensureChat } from '../helpers';
 
 /**
  * Archive a chat
@@ -39,7 +40,7 @@ import { setArchive } from '../../whatsapp/functions';
 export async function archive(chatId: string | Wid, archive = true) {
   const wid = assertWid(chatId);
 
-  const chat = assertGetChat(wid);
+  const chat = await ensureChat(wid);
 
   if (chat.archive === archive) {
     throw new WPPError(
