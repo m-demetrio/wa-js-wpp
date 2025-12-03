@@ -16,6 +16,7 @@
 
 import { assertFindChat, assertGetChat, InvalidChat } from '../../assert';
 import type { ChatModel, Wid } from '../../whatsapp';
+import { ContactStore, WidFactory } from '../../whatsapp';
 import { resolveChatLid } from './resolveChatLid';
 
 export interface EnsureChatOptions {
@@ -67,4 +68,30 @@ export async function ensureChat(
   }
 
   return chat;
+}
+
+/**
+ * Synchronous helper used by APIs that must remain sync while still tolerating
+ * contacts whose active chat entry is stored under a LID instead of the
+ * provided user wid.
+ */
+export function ensureChatSync(chatId: string | Wid): ChatModel {
+  const wid = WidFactory.createWid(chatId as any);
+
+  try {
+    return assertGetChat(wid);
+  } catch (error) {
+    if (!(error instanceof InvalidChat)) {
+      throw error;
+    }
+
+    const contact = ContactStore.get(wid);
+    const lid = contact?.lid;
+
+    if (lid?.isLid?.()) {
+      return assertGetChat(lid);
+    }
+
+    throw error;
+  }
 }

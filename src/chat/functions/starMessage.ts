@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { assertGetChat } from '../../assert';
 import { Cmd, MsgModel } from '../../whatsapp';
+import { ensureChat } from '../helpers';
 import { getMessageById } from '.';
 
 export interface StarMessageReturn {
@@ -88,7 +88,7 @@ export async function starMessage(
   }));
 
   for (const chatId in msgsPerChat) {
-    const chat = assertGetChat(chatId);
+    const chat = await ensureChat(chatId);
     const msgs = msgsPerChat[chatId];
 
     if (star) {
