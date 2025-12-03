@@ -75,32 +75,41 @@ export async function ensureChat(
     return await resolveChatLid(wid);
   };
 
+  const lid = await tryResolveLid();
+  const candidateIds =
+    lid && lid.toString() !== wid.toString() ? [wid, lid] : [wid];
+
   let chat: ChatModel | undefined;
 
-  if (createChat) {
-    const lid = await tryResolveLid();
-
-    if (lid && lid.toString() !== wid.toString()) {
-      chat = tryGetChat(lid);
+  for (const id of candidateIds) {
+    const existing = tryGetChat(id);
+    if (existing) {
+      chat = existing;
+      break;
     }
+  }
 
-    if (!chat) {
-      chat = await assertFindChat(lid ?? wid);
-    }
-  } else {
-    chat = tryGetChat(wid);
+  if (!chat) {
+    for (const id of candidateIds) {
+      try {
+        chat = await assertFindChat(id);
+        break;
+      } catch (error) {
+        if (!(error instanceof InvalidChat)) {
+          throw error;
+        }
 
-    if (!chat) {
-      const lid = await tryResolveLid();
+        if (!createChat) {
+          continue;
+        }
 
-      if (lid) {
-        chat = tryGetChat(lid) ?? (await assertFindChat(lid));
+        throw error;
       }
     }
+  }
 
-    if (!chat) {
-      chat = await assertFindChat(wid);
-    }
+  if (!chat) {
+    throw new InvalidChat(wid);
   }
 
   if (ensureLid && chat?.id?.isUser?.()) {
