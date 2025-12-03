@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { assertGetChat } from '../../assert';
 import { WPPError } from '../../util';
 import { MsgKey, MsgModel, PinInChatStore } from '../../whatsapp';
 import { ACK, MSG_TYPE, PIN_STATE, SendMsgResult } from '../../whatsapp/enums';
 import { sendPinInChatMsg } from '../../whatsapp/functions';
+import { ensureChat } from '../helpers';
 import { getMessageById } from './getMessageById';
 
 /**
@@ -45,7 +45,7 @@ export async function pinMsg(
   seconds = 604800 // default 7 days
 ): Promise<{ message: MsgModel; pinned: boolean; result: SendMsgResult }> {
   const msg = await getMessageById(msgId);
-  const chat = assertGetChat(msg.id.remote);
+  const chat = await ensureChat(msg.id.remote);
   const pinned = PinInChatStore.getByParentMsgKey(msg.id);
 
   if (chat.isNewsletter) {
