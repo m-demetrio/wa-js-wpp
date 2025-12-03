@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { assertGetChat } from '../../assert';
 import { isBusiness } from '../../profile';
 import { WPPError } from '../../util';
 import { NoteModel, Wid } from '../../whatsapp';
 import { retrieveOnlyNoteForChatJid } from '../../whatsapp/functions/addOrEditNoteAction';
+import { ensureChat } from '../helpers';
 
 /**
  * Get notes from a contact
@@ -32,7 +32,7 @@ import { retrieveOnlyNoteForChatJid } from '../../whatsapp/functions/addOrEditNo
 export async function getNotes(
   chatId: string | Wid
 ): Promise<NoteModel | null> {
-  const chat = assertGetChat(chatId);
+  const chat = await ensureChat(chatId);
   if (!isBusiness()) {
     throw new WPPError(
       'connected_device_not_is_business',
