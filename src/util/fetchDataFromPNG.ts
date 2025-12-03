@@ -24,8 +24,8 @@ export function fetchDataFromPNG(url: string): Promise<Uint8Array> {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d')!;
 
-      canvas.height = img.naturalHeight;
       canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       ctx.drawImage(img, 0, 0);
 
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -35,18 +35,9 @@ export function fetchDataFromPNG(url: string): Promise<Uint8Array> {
     ); // Skip alfa color
     const buffer = Buffer.from(rgbBytes);
 
-      // Get the image size
-      const size =
-        (buffer[1] << 56) +
-        (buffer[2] << 48) +
-        (buffer[3] << 40) +
-        (buffer[4] << 32) +
-        (buffer[5] << 24) +
-        (buffer[6] << 16) +
-        (buffer[7] << 8) +
-        buffer[8];
+      const dataSize = Number(size);
 
-      resolve(new Uint8Array(buffer.subarray(9, size + 9)));
+      resolve(rgbData.subarray(8, 8 + dataSize));
     };
   });
 }

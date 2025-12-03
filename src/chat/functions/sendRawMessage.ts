@@ -131,7 +131,7 @@ export async function sendRawMessage(
     const sendResult = await result[1];
 
     debug(
-      `ack received for ${rawMessage.id} (ACK: ${message.ack}, SendResult: ${sendResult})`
+      `ack received for ${rawMessage.id} (ACK: ${message.ack}, SendResult: ${sendResult.messageSendResult})`
     );
   }
 
@@ -144,8 +144,8 @@ export async function sendRawMessage(
     ...(message.from && {
       from: message.from.toString(),
     }),
-    ...(message.to && {
-      to: message.to.toString(),
+    ...(chat && {
+      to: chat.id.toString(),
     }),
     sendMsgResult: result[1]!,
   };

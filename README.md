@@ -10,7 +10,32 @@
 [![Lint Status](https://img.shields.io/github/actions/workflow/status/wppconnect-team/wa-js/lint.yml??branch=main&label=lint)](https://github.com/wppconnect-team/wa-js/actions/workflows/lint.yml)
 [![release-it](https://img.shields.io/badge/%F0%9F%93%A6%F0%9F%9A%80-release--it-e10079.svg)](https://github.com/release-it/release-it)
 
-> WPPConnect/WA-JS is an open-source project with the aim of exporting functions from WhatsApp Web, which can be used to support the creation of any interaction, such as customer service, media sending, intelligence recognition based on phrases artificial and many other things, use your imagination...
+> WPPConnect/WA-JS is an open-source project with the aim of exporting functions from WhatsApp Web, which can be used to support the creation of any interaction, such as customer service, media sending, intelligence recognition based on phrases and many other things, use your imagination...
+
+## Notas de versão e build
+
+Para alterar o número de versão utilizado nos builds execute a atualização no campo `version` do arquivo [`package.json`](./package.json). Após ajustar o valor, recomenda-se rodar `npm install` (para atualizar o lockfile) e o comando de build desejado, por exemplo `npm run build:prd`. Caso utilize o fluxo de releases oficial, também é possível disparar `npm run release`, que aplica o `version bump`, atualiza o changelog e publica o pacote.
+
+## Documentação das correções relacionadas à criação de chats
+
+As alterações recentes garantem que mensagens enviadas para contatos sem histórico local criem o chat e preencham corretamente o **LID** antes da persistência. Os principais pontos são:
+
+- `src/chat/patch.ts` intercepta `createChatRecord` para preencher `accountLid` com o LID resolvido a partir do contato ou via `queryExists`, além de tentar novamente a gravação em caso de erros transitórios. O mesmo arquivo mantém uma cache simples de LIDs em `ContactStore` e preserva os patches já existentes para conversão de LIDs.
+- `src/chat/functions/sendRawMessage.ts` tenta novamente obter o chat via `assertFindChat` quando `assertGetChat` lança `InvalidChat`, permitindo que mensagens de texto abram novos chats automaticamente.
+- `src/chat/functions/sendFileMessage.ts` replica a lógica de fallback para `InvalidChat`, permitindo que o envio de arquivos também gere o chat quando necessário.
+- `src/whatsapp/models/ContactModel.ts` expõe a propriedade opcional `lid`, possibilitando armazenar o identificador resolvido do contato no cache local.
+
+Com essas mudanças, chamar `WPP.contact.queryExists('<numero>@c.us')` antes da primeira mensagem garante que o LID esteja disponível e evita falhas de persistência ao enviar textos ou arquivos.
+
+### Criando uma biblioteca própria mais estável
+
+Para reutilizar essas proteções em uma biblioteca personalizada (por exemplo, quando você cria um _wrapper_ com todas as funções do `WPP.chat`), utilize os _helpers_ expostos em `src/chat/helpers/ensureChat.ts` e `src/chat/helpers/resolveChatLid.ts`:
+
+1. Sempre que for recuperar um chat antes de enviar qualquer mensagem, chame `ensureChat(chatId, { createChat: true/false })`. Esse helper unifica a lógica de _fallback_ (`assertGetChat` → `assertFindChat`) e garante que o LID seja resolvido automaticamente.
+2. Caso precise sincronizar o LID manualmente (por exemplo, em rotinas batch), você pode chamar `resolveChatLid(chatId)` diretamente. A função mantém um cache interno e atualiza o `ContactStore`, evitando chamadas duplicadas ao servidor.
+3. Nas suas funções de envio, reutilize o mesmo chat retornado por `ensureChat` para montar a mensagem e seguir com `sendRawMessage`/`sendFileMessage`. Isso garante que a conversa já esteja pronta para persistir no IndexedDB sem erros de `Lid is missing`.
+
+Exportamos os helpers no pacote principal (`import { ensureChat } from 'wppconnect/wa-js/chat'`), o que facilita a criação de uma API estável sem duplicar código interno.
 
 ## Notas de versão e build
 
@@ -39,6 +64,7 @@ Exportamos os helpers no pacote principal (`import { ensureChat } from 'wppconne
 
 ## Our online channels
 
+[![Discussions](https://img.shields.io/github/discussions/wppconnect-team/wa-js?label=Discussions&logo=github)](https://github.com/wppconnect-team/wa-js/discussions)
 [![Discord](https://img.shields.io/discord/844351092758413353?color=blueviolet&label=Discord&logo=discord&style=flat)](https://discord.gg/JU5JGGKGNG)
 [![YouTube](https://img.shields.io/youtube/channel/subscribers/UCD7J9LG08PmGQrF5IS7Yv9A?label=YouTube)](https://www.youtube.com/c/wppconnect)
 [![WhatsApp Group](https://img.shields.io/badge/WhatsApp-Group-25D366?logo=whatsapp)](https://chat.whatsapp.com/LJaQu6ZyNvnBPNAVRbX00K)
@@ -53,20 +79,20 @@ Exportamos os helpers no pacote principal (`import { ensureChat } from 'wppconne
 
 ## How does it work
 
-This project extract some functions of WhatsApp sources, that uses webpack.
+This project extracts some functions of WhatsApp sources.
 
-After build, this project generate a file `dist/wppconnect-wa.js` to be used for injection in WhatsApp Web. When injected, it will explose a global variable named `WPP`.
+After build, this project generates a file `dist/wppconnect-wa.js` to be used for injection in WhatsApp Web. When injected, it will expose a global variable named `WPP`.
 
 Some parts of `WPP` variable:
 
-- `WPP.webpack` - Scripts to exports WhatsApp functions.
+- `WPP.webpack` - Scripts to export WhatsApp functions.
 - `WPP.whatsapp` - Only exported WhatsApp functions.
 - `WPP.chat` - Chat functions and events.
 - ...
 
 ## Exported WhatsApp modules
 
-There are a convection name for some exported modules:
+There are convention names for some exported modules:
 
 - `...Model` - Class for data structure (`ClassModel`, `MsgModel`)
 - `...Collection` - Class for collection of models (`ChatCollection`, `MsgCollection`)
@@ -80,42 +106,79 @@ There are a convection name for some exported modules:
 
 `WPP.conn.logout` - Logout from WhatsApp Web
 
+`WPP.conn.getBuildConstants` - Current WhatsApp build constants
+
+For the most up-to-date list of available functions, launch the project locally and run this in your browser console:
+
+`Object.keys(WPP.conn).sort()`
+
 ### Chat Functions
 `WPP.chat.sendTextMessage` - Send a text message
 
-`WPP.chat.sendImageMessage` - Send an image message
+`WPP.chat.sendFileMessage` - Send a file message (medias in general [video, audio, image, pdf])
 
-`WPP.chat.sendVideoMessage` - Send a video message
-
-`WPP.chat.sendFileMessage` - Send a file message
-
-`WPP.chat.sendAudioMessage` - Send an audio message
-
-`WPP.chat.getChat` - Get chat details
+`WPP.chat.get` - Get chat details
 
 `WPP.chat.deleteMessage` - Delete a message
 
+For the most up-to-date list of available functions, launch the project locally and run this in your browser console:
+
+`Object.keys(WPP.chat).sort()`
+
 ### Contact Functions
-`WPP.contact.getContact` - Get contact details
-
-`WPP.contact.blockContact` - Block a contact
-
-`WPP.contact.unblockContact` - Unblock a contact
+`WPP.contact.get` - Get contact details
 
 `WPP.contact.getAllContacts` - Get all contacts
 
+`WPP.contact.getStatus` - Get status (`about` field in profile)
+
+`WPP.contact.getCommonGroups` - Get groups in common with one contact
+
+`WPP.contact.getPnLidEntry` - Get PN (Phone Number), Lid and Contact from local cache
+
+For the most up-to-date list of available functions, launch the project locally and run this in your browser console:
+
+`Object.keys(WPP.contact).sort()`
+
+### Blocklist Functions
+
+`WPP.blocklist.blockContact` - Block a contact
+
+`WPP.blocklist.unblockContact` - Unblock a contact
+
+`WPP.blocklist.all` - All blocked contacts
+
+`WPP.blocklist.isBlocked` - Check if contact is blocked
+
+For the most up-to-date list of available functions, launch the project locally and run this in your browser console:
+
+`Object.keys(WPP.blocklist).sort()`
+
 ### Group Functions
-`WPP.group.createGroup` - Create a new group
 
-`WPP.group.addParticipant` - Add a participant to a group
+`WPP.group.create` - Create a new group
 
-`WPP.group.removeParticipant` - Remove a participant from a group.
+`WPP.group.canAdd` - Check if contact can be added to group
 
-`WPP.group.promoteParticipant` - Promote a participant to admin
+`WPP.group.addParticipants` - Add participants to a group
 
-`WPP.group.demoteParticipant` - Demote a participant from admin.
+`WPP.group.removeParticipants` - Remove participants from a group.
+
+`WPP.group.canPromote` - Check if contact can be promoted
+
+`WPP.group.promoteParticipants` - Promote participants to admin
+
+`WPP.group.canDemote` - Check if contact can be demoted
+
+`WPP.group.demoteParticipants` - Demote participants from admin.
 
 `WPP.group.getGroupInfoFromInviteCode` - Get group information from an invitation link or an invite code.
+
+`WPP.group.getAllGroups` - Get all groups
+
+For the most up-to-date list of available functions, launch the project locally and run this in your browser console:
+
+`Object.keys(WPP.group).sort()`
 
 ### Events
 `WPP.chat.on('chat.new_message')` - Event to dispatch on receive a new message
@@ -127,24 +190,38 @@ To see all events, check: [https://wppconnect.io/wa-js/types/ev.EventTypes.html]
 Steps to run locally:
 
 ```bash
-# install the depencencies
+# install the dependencies
 npm install
-
-# download whatsapp javascript and prettify (optional)
-npm run wa-source
 
 # build javascript files
 npm run build:prd # or build:dev for development
 
 # launch a local browser with automatic injection
+# this will also cache the files inside wa-source directory, for next requests
 npm run launch:local
 
 # or only run in VSCode
 ```
 
+Note: to run specific versions run:
+
+```sh
+npm run wa-source:clean
+
+npm run build:prd
+
+WA_VERSION="2.3000.1029560485" npm run launch:local
+```
+
+To debug or inspect `wa-source` folder, format the files to be easier to understand
+
+```sh
+npm run wa-source:format
+```
+
 ## How to use this project
 
-Basicaly, you need to inject the `wppconnect-wa.js` file into the browser after WhatsApp page load.
+Basically, you need to inject the `wppconnect-wa.js` file into the browser after WhatsApp page load.
 
 ### TamperMonkey or GreaseMonkey
 
