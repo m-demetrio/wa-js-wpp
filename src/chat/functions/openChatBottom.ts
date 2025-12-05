@@ -32,5 +32,5 @@ export async function openChatBottom(chatId: string | Wid): Promise<boolean> {
 
   const chat = await assertFindChat(wid);
 
-  return await Cmd.openChatBottom(chat);
+  return await Cmd.openChatBottom({ chat, chatEntryPoint: 'Chatlist' } as any);
 }

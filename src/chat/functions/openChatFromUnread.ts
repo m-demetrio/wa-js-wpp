@@ -34,5 +34,8 @@ export async function openChatFromUnread(
 
   const chat = await assertFindChat(wid);
 
-  return await Cmd.openChatFromUnread(chat);
+  return await Cmd.openChatFromUnread({
+    chat,
+    chatEntryPoint: 'Chatlist',
+  } as any);
 }
