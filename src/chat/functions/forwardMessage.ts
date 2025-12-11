@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import { assertFindChat } from '../../assert';
 import { MsgKey, Wid } from '../../whatsapp';
 import { forwardMessagesToChats } from '../../whatsapp/functions';
 import { getMessageById } from '..';
+import { ensureChat } from '../helpers';
 
 export interface ForwardMessagesOptions {
   displayCaptionText?: boolean;
@@ -40,7 +40,7 @@ export async function forwardMessage(
   msgId: string | MsgKey,
   options: ForwardMessagesOptions = {}
 ): Promise<boolean> {
-  const chat = await assertFindChat(toChatId);
+  const chat = await ensureChat(toChatId);
 
   const msg = await getMessageById(msgId);
 

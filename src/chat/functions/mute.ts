@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import { assertGetChat, assertWid } from '../../assert';
+import { assertWid } from '../../assert';
 import { WPPError } from '../../util';
 import { Wid } from '../../whatsapp';
 import { unixTime } from '../../whatsapp/functions';
+import { ensureChat } from '../helpers';
 
 /**
  * Mute a chat, you can use duration or expiration
@@ -45,7 +46,7 @@ export async function mute(
 ) {
   const wid = assertWid(chatId);
 
-  const chat = assertGetChat(wid);
+  const chat = await ensureChat(wid);
 
   let expiration = 0;
 
