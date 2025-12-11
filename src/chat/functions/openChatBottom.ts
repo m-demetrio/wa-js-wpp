@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { assertFindChat, assertWid } from '../../assert';
 import { Cmd, Wid } from '../../whatsapp';
+import { ensureChat } from '../helpers';
 
 /**
  * Open the chat in the WhatsApp interface in bottom position
@@ -28,9 +28,7 @@ import { Cmd, Wid } from '../../whatsapp';
  * @category Chat
  */
 export async function openChatBottom(chatId: string | Wid): Promise<boolean> {
-  const wid = assertWid(chatId);
-
-  const chat = await assertFindChat(wid);
+  const chat = await ensureChat(chatId);
 
   return await Cmd.openChatBottom(chat);
 }

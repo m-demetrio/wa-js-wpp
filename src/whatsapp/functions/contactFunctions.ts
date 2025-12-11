@@ -182,14 +182,18 @@ injectFallbackModule('getIsMyContact', {
   getSearchVerifiedName: (contact: ContactModel) => contact.searchVerifiedName,
   getHeader: (contact: ContactModel) => contact.header,
   getIsMe: (contact: ContactModel) => contact.isMe,
-  getIsUser: (contact: ContactModel) => contact.isUser,
-  getIsGroup: (contact: ContactModel) => contact.isGroup,
-  getIsNewsletter: (contact: ContactModel) => contact.isNewsletter,
-  getIsBroadcast: (contact: ContactModel) => contact.isBroadcast,
-  getIsPSA: (contact: ContactModel) => contact.isPSA,
+  getIsUser: (contact: ContactModel) =>
+    contact.id?.isUser?.() ?? contact.isUser,
+  getIsGroup: (contact: ContactModel) =>
+    contact.id?.isGroup?.() ?? contact.isGroup,
+  getIsNewsletter: (contact: ContactModel) =>
+    contact.id?.isNewsletter?.() ?? contact.isNewsletter,
+  getIsBroadcast: (contact: ContactModel) =>
+    contact.id?.isBroadcast?.() ?? contact.isBroadcast,
+  getIsPSA: (contact: ContactModel) => contact.id?.isPSA?.() ?? contact.isPSA,
   getIsIAS: (contact: ContactModel) => contact.isIAS,
   getIsSupportAccount: (contact: ContactModel) => contact.isSupportAccount,
-  getIsWAContact: (contact: ContactModel) => contact.isWAContact,
+  getIsWAContact: (contact: ContactModel) => contact.id?.isUser?.() ?? false,
   getIsMyContact: (contact: ContactModel) => contact.isMyContact,
   getCanRequestPhoneNumber: (contact: ContactModel) =>
     contact.canRequestPhoneNumber,
