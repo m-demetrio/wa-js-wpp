@@ -21,12 +21,25 @@ import { list } from './list';
 let unreadChats: Array<ChatModel> = [];
 
 on('chat.unread_count_changed', (params) => {
+  const chat = params.chat;
+  const serialized = chat?.id?._serialized;
+
+  if (!serialized) {
+    return;
+  }
+
+  const alreadyTracked = unreadChats.find(
+    (entry) => entry.id?._serialized === serialized
+  );
+
   if (params.unreadCount > 0) {
-    if (!unreadChats.find((chat) => chat.id === params.chat?.id)) {
-      unreadChats.push(params.chat);
+    if (!alreadyTracked) {
+      unreadChats.push(chat);
     }
   } else {
-    unreadChats = unreadChats.filter((chat) => chat.id != params.chat?.id);
+    unreadChats = unreadChats.filter(
+      (entry) => entry.id?._serialized !== serialized
+    );
   }
 });
 

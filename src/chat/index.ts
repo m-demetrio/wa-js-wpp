@@ -19,4 +19,5 @@ import './patch';
 
 export * from './defaultSendMessageOptions';
 export * from './functions';
+export * from './helpers';
 export * from './types';

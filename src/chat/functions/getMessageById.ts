@@ -16,10 +16,10 @@
 
 import Debug from 'debug';
 
-import { assertGetChat } from '../../assert';
 import { WPPError } from '../../util';
 import { MsgKey, MsgModel, MsgStore, StatusV3Store } from '../../whatsapp';
 import { getSearchContext } from '../../whatsapp/functions';
+import { ensureChat } from '../helpers';
 
 const debug = Debug('WA-JS:message:getMessageById');
 
@@ -65,7 +65,7 @@ export async function getMessageById(
       if (isStatus) {
         msg = StatusV3Store.getMyStatus().msgs.get(msgKey);
       } else {
-        const chat = assertGetChat(msgKey.remote);
+        const chat = await ensureChat(msgKey.remote);
         msg = chat.msgs.get(msgKey);
 
         if (!msg) {
