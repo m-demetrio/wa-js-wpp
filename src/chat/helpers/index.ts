@@ -1,5 +1,5 @@
 /*!
- * Copyright 2021 WPPConnect Team
+ * Copyright 2022 WPPConnect Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,5 @@
  * limitations under the License.
  */
 
-import { ChatModel, Cmd, Wid } from '../../whatsapp';
-import { ensureChat } from '../helpers';
-
-/**
- * Open the chat in the WhatsApp interface from first unread message
- *
- * @example
- * ```javascript
- * await WPP.chat.openChatFromUnread('[number]@c.us');
- * ```
- *
- * @category Chat
- */
-export async function openChatFromUnread(
-  chatId: string | Wid | ChatModel
-): Promise<boolean> {
-  const chat = await ensureChat(chatId);
-
-  return await Cmd.openChatFromUnread(chat);
-}
+export * from './ensureChat';
+export * from './resolveChatLid';
