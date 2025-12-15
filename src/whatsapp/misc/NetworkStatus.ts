@@ -27,5 +27,9 @@ exportModule(
   {
     NetworkStatus: 'default',
   },
-  (m) => m.default.checkOnline
+  (m) =>
+    m.default?.checkOnline ||
+    m.checkOnline ||
+    m.default?.NetworkStatus ||
+    m.NetworkStatus
 );

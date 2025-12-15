@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-import { assertGetChat, assertWid } from '../../assert';
+import { assertWid } from '../../assert';
 import { WPPError } from '../../util';
 import { Wid } from '../../whatsapp';
 import { setPin } from '../../whatsapp/functions';
+import { ensureChat } from '../helpers';
 
 /**
  * Pin a chat
@@ -37,7 +38,7 @@ import { setPin } from '../../whatsapp/functions';
 export async function pin(chatId: string | Wid, pin = true) {
   const wid = assertWid(chatId);
 
-  const chat = assertGetChat(wid);
+  const chat = await ensureChat(wid);
 
   if (chat.pin === pin) {
     throw new WPPError(

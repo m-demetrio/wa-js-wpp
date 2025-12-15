@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { assertGetChat, assertIsBusiness } from '../../assert';
+import { assertIsBusiness } from '../../assert';
+import { ensureChat } from '../../chat/helpers';
 import { LabelStore, Wid } from '../../whatsapp';
 
 export interface AddOrRemoveLabelsOptions {
@@ -45,7 +46,7 @@ export async function addOrRemoveLabels(
     options = [options];
   }
 
-  const chats = chatIds.map((e) => assertGetChat(e));
+  const chats = await Promise.all(chatIds.map((e) => ensureChat(e)));
   const labels = options.map((e) => {
     return {
       id: e.labelId,
