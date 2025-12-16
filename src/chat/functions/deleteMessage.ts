@@ -16,10 +16,10 @@
 
 import { compare } from 'compare-versions';
 
-import { assertGetChat } from '../../assert';
 import { iAmAdmin } from '../../group';
 import { Cmd, Wid } from '../../whatsapp';
 import { MSG_TYPE, SendMsgResult } from '../../whatsapp/enums';
+import { ensureChat } from '../helpers';
 import { getMessageById } from '.';
 
 export interface DeleteMessageReturn {
@@ -53,7 +53,7 @@ export async function deleteMessage(
   deleteMediaInDevice = false,
   revoke = false
 ): Promise<DeleteMessageReturn | DeleteMessageReturn[]> {
-  const chat = assertGetChat(chatId);
+  const chat = await ensureChat(chatId);
 
   let isSingle = false;
 

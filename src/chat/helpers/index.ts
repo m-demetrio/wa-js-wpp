@@ -1,5 +1,5 @@
 /*!
- * Copyright 2021 WPPConnect Team
+ * Copyright 2022 WPPConnect Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,7 @@
  * limitations under the License.
  */
 
-import { exportModule } from '../exportModule';
-import { NetworkStatusModel } from '../models';
-
-/**
- * @whatsapp 765044 >= 2.2222.8
- */
-export declare const NetworkStatus: NetworkStatusModel;
-
-exportModule(
-  exports,
-  {
-    NetworkStatus: 'default',
-  },
-  (m) =>
-    m.default?.checkOnline ||
-    m.checkOnline ||
-    m.default?.NetworkStatus ||
-    m.NetworkStatus ||
-    // Some builds wrap the default twice
-    m.default?.default?.checkOnline ||
-    m.default?.default?.NetworkStatus
-);
+export * from './ensureChat';
+export * from './resolveCanonicalChatId';
+export * from './resolveCanonicalWid';
+export * from './resolveChatLid';

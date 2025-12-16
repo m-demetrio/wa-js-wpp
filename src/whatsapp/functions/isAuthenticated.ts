@@ -33,11 +33,31 @@ export declare function isLoggedIn(): boolean;
 exportModule(
   exports,
   {
-    isAuthenticated: ['isLoggedIn', 'Z'],
-    isLoggedIn: ['isLoggedIn', 'Z'],
+    isAuthenticated: [
+      'isAuthenticated',
+      'isLoggedIn',
+      'Conn.isAuthenticated',
+      'Conn.isLoggedIn',
+      'Z',
+    ],
+    isLoggedIn: [
+      'isLoggedIn',
+      'isAuthenticated',
+      'Conn.isLoggedIn',
+      'Conn.isAuthenticated',
+      'Z',
+    ],
   },
   (m) =>
-    (m.Z?.toString().includes('isRegistered') &&
-      m.Z?.toString().includes('getLoginTokens')) ||
-    m.isLoggedIn // whatsapp >= 2.2208.11
+    m.isAuthenticated ||
+    m.isLoggedIn ||
+    m.Conn?.isAuthenticated ||
+    m.Conn?.isLoggedIn ||
+    m.default?.isAuthenticated ||
+    m.default?.isLoggedIn ||
+    m.default?.Conn?.isAuthenticated ||
+    m.default?.Conn?.isLoggedIn ||
+    (typeof m.Z === 'function' &&
+      m.Z?.toString().includes('isRegistered') &&
+      m.Z?.toString().includes('getLoginTokens'))
 );

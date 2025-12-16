@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { assertFindChat, assertWid } from '../../assert';
-import { Cmd, Wid } from '../../whatsapp';
+import { ChatModel, Cmd, Wid } from '../../whatsapp';
+import { ensureChat } from '../helpers';
 
 /**
  * Open the chat in the WhatsApp interface from first unread message
@@ -28,11 +28,9 @@ import { Cmd, Wid } from '../../whatsapp';
  * @category Chat
  */
 export async function openChatFromUnread(
-  chatId: string | Wid
+  chatId: string | Wid | ChatModel
 ): Promise<boolean> {
-  const wid = assertWid(chatId);
-
-  const chat = await assertFindChat(wid);
+  const chat = await ensureChat(chatId);
 
   return await Cmd.openChatFromUnread(chat);
 }
