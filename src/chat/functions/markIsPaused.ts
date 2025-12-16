@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { assertGetChat } from '../../assert';
 import { ChatPresence, Wid } from '../../whatsapp';
+import { ensureChat } from '../helpers';
 
 /**
  * Mark a chat is paused state
@@ -28,7 +28,7 @@ import { ChatPresence, Wid } from '../../whatsapp';
  * @category Chat
  */
 export async function markIsPaused(chatId: string | Wid) {
-  const chat = assertGetChat(chatId);
+  const chat = await ensureChat(chatId);
 
   await chat.presence.subscribe();
 
