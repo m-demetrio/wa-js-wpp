@@ -37,8 +37,12 @@ import {
   prepareRawMessage,
   SendMessageOptions,
 } from '../../chat';
+import {
+  resolveCanonicalChatId,
+  resolveCanonicalWid,
+} from '../../chat/helpers';
 import { getMyUserId } from '../../conn';
-import { createWid, WPPError } from '../../util';
+import { WPPError } from '../../util';
 import { CartStore } from '../../whatsapp';
 import {
   addAndSendMsgToChat,
@@ -68,7 +72,8 @@ export async function submit(
       }
     );
   }
-  const chat = await assertFindChat(createWid(wid!)!);
+  const chatId = resolveCanonicalWid(await resolveCanonicalChatId(wid));
+  const chat = await assertFindChat(chatId);
   const order = await createOrder(chat.id, cart.cartItemCollection.toArray());
 
   const totalPrice = order.price?.total;

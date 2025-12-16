@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { assertGetChat } from '../../assert';
 import { ChatPresence, Wid } from '../../whatsapp';
+import { ensureChat } from '../helpers';
 import { markIsPaused } from '.';
 
 /**
@@ -33,7 +33,7 @@ import { markIsPaused } from '.';
  * @category Chat
  */
 export async function markIsRecording(chatId: string | Wid, duration?: number) {
-  const chat = assertGetChat(chatId);
+  const chat = await ensureChat(chatId);
 
   await chat.presence.subscribe();
 
