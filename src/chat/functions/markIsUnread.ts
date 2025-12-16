@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { assertGetChat } from '../../assert';
 import { Wid } from '../../whatsapp';
 import { markUnread } from '../../whatsapp/functions';
+import { ensureChat } from '../helpers';
 
 /**
  * Mark a chat as unread
@@ -29,7 +29,7 @@ import { markUnread } from '../../whatsapp/functions';
  * @category Chat
  */
 export async function markIsUnread(chatId: string | Wid) {
-  const chat = assertGetChat(chatId);
+  const chat = await ensureChat(chatId);
 
   await markUnread(chat, true);
 

@@ -15,6 +15,11 @@
  */
 
 import { chat as Chat } from '../';
+import {
+  resolveCanonicalChatId,
+  resolveCanonicalChatIdSync,
+  resolveCanonicalWid,
+} from '../chat/helpers';
 import { WPPError } from '../util';
 import { ChatModel, NewsletterStore, Wid } from '../whatsapp';
 
@@ -25,7 +30,8 @@ export class InvalidChat extends WPPError {
 }
 
 export async function assertFindChat(id: string | Wid): Promise<ChatModel> {
-  const chat = await (Chat as any).find(id);
+  const canonical = await resolveCanonicalChatId(id);
+  const chat = await (Chat as any).find(resolveCanonicalWid(canonical));
 
   if (!chat) {
     throw new InvalidChat(id);
@@ -36,14 +42,15 @@ export async function assertFindChat(id: string | Wid): Promise<ChatModel> {
 
 export function assertGetChat(id: string | Wid): ChatModel {
   let chat = null;
-  if (id.toString().includes('newsletter')) {
-    chat = NewsletterStore.get(id);
+  const target = resolveCanonicalWid(resolveCanonicalChatIdSync(id));
+  if (target.toString().includes('newsletter')) {
+    chat = NewsletterStore.get(target as any);
   } else {
-    chat = (Chat as any).get(id);
+    chat = (Chat as any).get(target);
   }
 
   if (!chat) {
-    throw new InvalidChat(id);
+    throw new InvalidChat(target as any);
   }
 
   return chat;

@@ -22,4 +22,15 @@ import { StreamModel } from '../models';
  */
 export declare const Stream: StreamModel;
 
-exportModule(exports, { Stream: 'Stream' }, (m) => m.Stream);
+exportModule(
+  exports,
+  { Stream: 'Stream' },
+  (m) =>
+    m.Stream ||
+    m.openStream ||
+    m.default?.Stream ||
+    m.default?.openStream ||
+    // Some builds wrap the default twice
+    m.default?.default?.Stream ||
+    m.default?.default?.openStream
+);
