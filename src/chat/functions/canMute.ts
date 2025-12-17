@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import { assertGetChat, assertWid } from '../../assert';
+import { assertWid } from '../../assert';
 import { Wid } from '../../whatsapp';
+import { ensureChatSync } from '../helpers';
 
 /**
  * Check if is possible to mute this chat
@@ -30,7 +31,7 @@ import { Wid } from '../../whatsapp';
 export function canMute(chatId: string | Wid): boolean {
   const wid = assertWid(chatId);
 
-  const chat = assertGetChat(wid);
+  const chat = ensureChatSync(wid);
 
   return chat.mute.canMute();
 }

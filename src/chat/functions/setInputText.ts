@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-import { assertFindChat } from '../../assert';
 import { getActiveChat } from '../../chat';
 import { WPPError } from '../../util';
 import { ComposeBoxActions, Wid } from '../../whatsapp';
 import { unixTime } from '../../whatsapp/functions';
+import { ensureChat } from '../helpers';
 
 export async function setInputText(
   text: string,
@@ -28,7 +28,7 @@ export async function setInputText(
   timestamp: number;
 }> {
   const chat =
-    chatId !== undefined ? await assertFindChat(chatId) : getActiveChat();
+    chatId !== undefined ? await ensureChat(chatId) : getActiveChat();
 
   if (!chat) {
     throw new WPPError('not_in_chat', 'Not active chat or invalid wid value');
