@@ -123,14 +123,12 @@ export interface AudioMessageOptions extends FileMessageOptions {
 }
 
 export interface DocumentMessageOptions
-  extends FileMessageOptions,
-    MessageButtonsOptions {
+  extends FileMessageOptions, MessageButtonsOptions {
   type: 'document';
 }
 
 export interface ImageMessageOptions
-  extends FileMessageOptions,
-    MessageButtonsOptions {
+  extends FileMessageOptions, MessageButtonsOptions {
   type: 'image';
   isViewOnce?: boolean;
   isHD?: boolean;
@@ -141,8 +139,7 @@ export interface StickerMessageOptions extends FileMessageOptions {
 }
 
 export interface VideoMessageOptions
-  extends FileMessageOptions,
-    MessageButtonsOptions {
+  extends FileMessageOptions, MessageButtonsOptions {
   type: 'video';
   isGif?: boolean;
   isPtv?: boolean;
@@ -358,14 +355,23 @@ export async function sendFileMessage(
     mediaData.fullWidth = 1128;
   }
   debug(`sending message (${options.type}) with id ${rawMessage.id}`);
-  const sendMsgResult = mediaPrep.sendToChat(chat, {
+
+  const processedOptions: any = {
     caption: options.caption,
     footer: options.footer,
     isViewOnce,
     productMsgOptions: chatId === 'status@broadcast' ? undefined : rawMessage,
     addEvenWhilePreparing: false,
     type: rawMessage.type,
-  } as any);
+  };
+
+  let sendMsgResult;
+
+  if (mediaPrep.sendToChat.length === 1) {
+    sendMsgResult = mediaPrep.sendToChat({ chat, options: processedOptions });
+  } else {
+    sendMsgResult = mediaPrep.sendToChat(chat, processedOptions);
+  }
   // Wait for message register
   let message: any = null;
 
@@ -457,9 +463,16 @@ export async function sendFileMessage(
 function generateWhiteThumb(width: number, height: number, maxSize: number) {
   let r = null != height ? height : maxSize,
     i = null != width ? width : maxSize;
-  r > i
-    ? r > maxSize && ((i *= maxSize / r), (r = maxSize))
-    : i > maxSize && ((r *= maxSize / i), (i = maxSize));
+
+  if (r > i) {
+    if (r > maxSize) {
+      i *= maxSize / r;
+      r = maxSize;
+    }
+  } else if (i > maxSize) {
+    r *= maxSize / i;
+    i = maxSize;
+  }
 
   const bounds = { width: Math.max(r, 1), height: Math.max(i, 1) };
 
