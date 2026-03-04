@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { assertGetChat } from '../../assert';
 import { isMultiDevice } from '../../conn';
 import { MsgKey, MsgModel, MsgStore, Wid } from '../../whatsapp';
 import { MSG_TYPE } from '../../whatsapp/enums';
@@ -24,7 +25,6 @@ import {
   msgFindQuery,
 } from '../../whatsapp/functions';
 import { RawMessage } from '..';
-import { ensureChat } from '../helpers';
 
 export interface GetMessagesOptions {
   count?: number;
@@ -106,7 +106,7 @@ export async function getMessages(
   chatId: string | Wid,
   options: GetMessagesOptions = {}
 ): Promise<RawMessage[]> {
-  const chat = await ensureChat(chatId);
+  const chat = assertGetChat(chatId);
 
   let count = options.count || 20;
   const direction = options.direction === 'after' ? 'after' : 'before';

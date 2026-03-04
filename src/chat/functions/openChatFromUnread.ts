@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-import { ChatModel, Cmd, Wid } from '../../whatsapp';
-import { ensureChat } from '../helpers';
+import { assertWid } from '../../assert';
+import { isWhatsAppVersionLTE } from '../../conn/functions/getBuildConstants';
+import { ChatStore, Cmd, Wid } from '../../whatsapp';
+import { findOrCreateLatestChat } from '../../whatsapp/functions';
 
 /**
  * Open the chat in the WhatsApp interface from first unread message
@@ -25,12 +27,39 @@ import { ensureChat } from '../helpers';
  * await WPP.chat.openChatFromUnread('[number]@c.us');
  * ```
  *
+ * @argument chatEntryPoint Optional chat entry point: "Chatlist" for any existing chat in the left panel, undefined for any other case.
+ *
  * @category Chat
  */
 export async function openChatFromUnread(
-  chatId: string | Wid | ChatModel
+  chatId: string | Wid,
+  chatEntryPoint?: string | undefined
 ): Promise<boolean> {
-  const chat = await ensureChat(chatId);
+  const wid = assertWid(chatId);
 
-  return await Cmd.openChatFromUnread(chat);
+  // Use findOrCreateLatestChat to match WhatsApp Web's native behavior
+  // This ensures the correct chat is found or created before opening
+  // Returns { chat: plain object with id, created: boolean }
+  const result = await findOrCreateLatestChat(wid, 'newChatFlow');
+
+  if (!result?.chat?.id) {
+    throw new Error(`Failed to find or create chat for ${wid.toString()}`);
+  }
+
+  // result.chat is a plain object, not a ChatModel instance
+  // Use ChatStore.get with the chat id to get the actual ChatModel
+  // This works for both regular contacts and @lid contacts
+  const chat = ChatStore.get(result.chat.id);
+
+  if (!chat) {
+    throw new Error(`Chat not found in ChatStore for ${wid.toString()}`);
+  }
+
+  // WhatsApp changed from positional to named params in version 2.3000.1029960097
+  if (isWhatsAppVersionLTE('2.3000.1029960097')) {
+    // Legacy: use positional params for older versions
+    return await Cmd.openChatFromUnread(chat);
+  }
+
+  return await Cmd.openChatFromUnread({ chat, chatEntryPoint });
 }
