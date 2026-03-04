@@ -72,7 +72,7 @@ async function start() {
         let module: any;
         try {
           module = submodules[name];
-        } catch (error) {}
+        } catch (_error) {}
 
         const resultName = dir ? `${dir}.${name}` : name;
 
@@ -86,6 +86,9 @@ async function start() {
   const version = await page
     .evaluate(() => (window as any).Debug.VERSION)
     .catch(() => null);
+
+  // if any pending request is hanging we unroute them to avoid errors, before browser close
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
 
   await browser.close();
 
@@ -101,11 +104,24 @@ async function start() {
    * This will not directly affect the function call, it continues to work normally.
    */
   const ignoreFailModules: string[] = [
-    'functions.revokeStatus',
-    'functions.setPushname',
-    'functions.editCollection',
-    'functions.deleteCollection',
     'functions.createCollection',
+    'functions.deleteCollection',
+    'functions.editCollection',
+    'functions.forwardMessages',
+    'functions.setPushname',
+    'functions.revokeStatus',
+    'functions.muteNewsletter', // removed in version 2.3000.1032373751
+    'functions.unmuteNewsletter', // removed in version 2.3000.1032373751
+    'functions.toggleNewsletterAdminActivityMuteStateAction', // new in version >= 2.3000.1032373751
+    'functions.msgFindQuery', // stopped working in WA version ~2.3000.1034162388
+    'functions.msgFindBefore', // added in WA version 2.3000.1034162388, but not available in older versions
+    'functions.msgFindAfter', // added in WA version 2.3000.1034162388, but not available in older versions
+    'functions.msgFindByDirection', // added in WA version 2.3000.1034162388, but not available in older versions
+    'functions.msgFindCallLog', // added in WA version 2.3000.1034162388, but not available in older versions
+    'functions.msgFindEvents', // added in WA version 2.3000.1034162388, but not available in older versions
+    'functions.msgFindMedia', // added in WA version 2.3000.1034162388, but not available in older versions
+    'functions.msgFindSearch', // added in WA version 2.3000.1034162388, but not available in older versions
+    'functions.msgFindStarred', // added in WA version 2.3000.1034162388, but not available in older versions
   ];
 
   for (const moduleName of Object.keys(result)) {

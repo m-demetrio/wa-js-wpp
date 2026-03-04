@@ -15,11 +15,13 @@
  */
 
 import { exportModule } from '../exportModule';
+import { Wid } from '../misc';
 
 /**
+ * Check if a given Wid should have an account LID based on migration status
  * @whatsapp WAWebLidMigrationUtils >= 2.3000.x
  */
-export declare function shouldHaveAccountLid(): boolean;
+export declare function shouldHaveAccountLid(wid: Wid): boolean;
 
 exportModule(
   exports,

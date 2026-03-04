@@ -15,7 +15,6 @@
  */
 
 /* eslint-disable simple-import-sort/exports */
-/* eslint-disable simple-import-sort/imports */
 import './config';
 import './deviceName';
 import './gtag';
@@ -38,6 +37,7 @@ export * as contact from './contact';
 export * as ev from './eventEmitter';
 export * as community from './community';
 export * as group from './group';
+export * as indexdb from './indexdb';
 export * as labels from './labels';
 export * as profile from './profile';
 export * as status from './status';

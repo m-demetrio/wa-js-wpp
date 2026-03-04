@@ -28,9 +28,22 @@ export interface MsgFindQueryParams {
   media?: 'url' | 'document';
 }
 
-/** @whatsapp 76581 */
+/**
+ * Find messages using the legacy API
+ *
+ * @deprecated Since WhatsApp version 2.3000.1034162388
+ * Use the new dedicated functions instead:
+ * - {@link msgFindByDirection} for 'before' and 'after' queries
+ * - {@link msgFindMedia} for 'media' queries
+ * - {@link msgFindStarred} for 'star' queries
+ * - {@link msgFindCallLog} for 'call_log' queries
+ * - {@link msgFindEvents} for 'event' queries
+ * - {@link msgFindSearch} for 'search' queries
+ *
+ * @whatsapp WAWebDBMessageFindLocal >= 2.3000.1029x, < 2.3000.1034162388
+ */
 export declare function msgFindQuery(
-  direction: 'after' | 'before' | 'media',
+  type: 'after' | 'before' | 'call_log' | 'event' | 'media' | 'search' | 'star',
   params: MsgFindQueryParams
 ): Promise<ModelPropertiesContructor<MsgModel>[] | any>;
 
@@ -40,6 +53,6 @@ exportModule(
     msgFindQuery: 'msgFindQuery',
   },
   (m) =>
-    (m.msgFindQuery && m.getMsgsByMsgKey) || // @whatsapp >= 2.2301.5
-    (m.msgFindQuery && m.queryMessageType) // @whatsapp >= 2.3000.1013409128
+    (m.msgFindQuery && m.getMsgsByMsgKey) || // @whatsapp >= 2.2301.5, < 2.3000.1034162388
+    (m.msgFindQuery && m.queryMessageType) // @whatsapp >= 2.3000.1013409128, < 2.3000.1034162388
 );

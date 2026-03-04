@@ -15,8 +15,8 @@
  */
 
 import { assertWid } from '../../assert';
-import { ChatModel, GroupMetadataStore, Wid } from '../../whatsapp';
-import { findChat } from '../../whatsapp/functions';
+import { ChatModel, ChatStore, GroupMetadataStore, Wid } from '../../whatsapp';
+import { findOrCreateLatestChat } from '../../whatsapp/functions';
 
 /**
  * Find a chat by id
@@ -28,12 +28,25 @@ import { findChat } from '../../whatsapp/functions';
 export async function find(chatId: string | Wid): Promise<ChatModel> {
   const wid = assertWid(chatId);
 
-  const chat = await findChat(
-    wid,
-    wid.isLid() ? 'username_contactless_search' : 'createChat'
-  );
+  // Use findOrCreateLatestChat to match WhatsApp Web's native behavior
+  // This ensures the chat is properly initialized and can be opened/clicked
+  // Returns { chat: plain object with id, created: boolean }
+  const result = await findOrCreateLatestChat(wid, 'newChatFlow');
 
-  if (chat.isGroup) {
+  if (!result?.chat?.id) {
+    throw new Error(`Failed to find or create chat for ${wid.toString()}`);
+  }
+
+  // result.chat is a plain object, not a ChatModel instance
+  // Use ChatStore.get with the chat id to get the actual ChatModel
+  // This works for both regular contacts and @lid contacts
+  const chat = ChatStore.get(result.chat.id);
+
+  if (!chat) {
+    throw new Error(`Chat not found in ChatStore for ${wid.toString()}`);
+  }
+
+  if (chat.id.isGroup()) {
     await GroupMetadataStore.find(chat.id);
   }
 

@@ -26,7 +26,7 @@ interface Props extends PropsChatBase {
   lastReceivedKey?: MsgKey;
   t?: number;
   unreadCount: number;
-  archive?: any;
+  archive?: boolean;
   isReadOnly: boolean;
   isAnnounceGrpRestrict: boolean;
   modifyTag?: any;
@@ -67,7 +67,10 @@ interface Session extends SessionChatBase {
   composeQuotedMsg?: any;
   composeQuotedMsgRemoteJid?: any;
   quotedMsgAdminGroupJid?: any;
+  groupSafetyChecked?: boolean;
   groupMetadata?: GroupMetadataModel;
+  groupType?: any;
+  newsletterMetadata?: any;
   presence?: any;
   mute: MuteModel;
   contact?: any;
@@ -135,8 +138,11 @@ interface Derived {
 }
 
 /** @whatsapp 63183 */
-export declare interface ChatModel
-  extends ModelProxy<Props, Session, Derived> {}
+export declare interface ChatModel extends ModelProxy<
+  Props,
+  Session,
+  Derived
+> {}
 
 /** @whatsapp 63183 */
 export declare class ChatModel extends ModelChatBase {

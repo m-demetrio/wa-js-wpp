@@ -25,7 +25,8 @@ export { deleteMessage, DeleteMessageReturn } from './deleteMessage';
 export { downloadMedia } from './downloadMedia';
 export { editMessage } from './editMessage';
 export { find } from './find';
-export { forwardMessage, ForwardMessagesOptions } from './forwardMessage';
+export { forwardMessage, ForwardMessageOptions } from './forwardMessage';
+export { forwardMessages, ForwardMessagesOptions } from './forwardMessages';
 export { generateMessageID } from './generateMessageID';
 export { get } from './get';
 export { getActiveChat } from './getActiveChat';
@@ -60,6 +61,10 @@ export {
   prepareMessageButtons,
 } from './prepareMessageButtons';
 export { prepareRawMessage } from './prepareRawMessage';
+export {
+  ButtonReplyOptions,
+  replyToButtonMessage,
+} from './replyToButtonMessage';
 export { requestPhoneNumber } from './requestPhoneNumber';
 export { sendCatalogMessage } from './sendCatalogMessage';
 export {

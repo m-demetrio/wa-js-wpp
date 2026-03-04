@@ -41,6 +41,7 @@ interface Props {
   labels?: string[];
   disappearingModeDuration?: any;
   disappearingModeSettingTimestamp?: any;
+  username?: string;
 }
 
 interface Session {
@@ -225,8 +226,11 @@ interface Derived {
 /** @whatsapp 121
  * @whatsapp 400121 >= 2.2222.8
  */
-export declare interface ContactModel
-  extends ModelProxy<Props, Session, Derived> {}
+export declare interface ContactModel extends ModelProxy<
+  Props,
+  Session,
+  Derived
+> {}
 
 /** @whatsapp 121
  * @whatsapp 400121 >= 2.2222.8

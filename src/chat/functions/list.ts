@@ -33,7 +33,9 @@ export interface ChatListOptions {
   onlyNewsletter?: boolean;
   onlyUsers?: boolean;
   onlyWithUnreadMessage?: boolean;
+  onlyArchived?: boolean;
   withLabels?: string[];
+  ignoreGroupMetadata?: boolean;
 }
 
 /**
@@ -70,6 +72,12 @@ export interface ChatListOptions {
  *
  * // Only with label with one of text or id
  * const chats = await WPP.chat.list({withLabels: ['Alfa','5']});
+ *
+ * // Only archived chats
+ * const chats = await WPP.chat.list({onlyArchived: true});
+ *
+ * // Ignore group metadata search
+ * const chats = await WPP.chat.list({ignoreGroupMetadata: true})
  * ```
  *
  * @category Chat
@@ -82,7 +90,8 @@ export async function list(
   const direction = options.direction === 'before' ? 'before' : 'after';
 
   // Getting All Chats.
-  // IDK, why we use slice here. don't think its needed.
+  // Slice is used here to duplicate the array, then we can modify it without change the WhatsApp internal variables.
+  // Also known as "shallow copy".
   let models = options.onlyNewsletter
     ? NewsletterStore.getModelsArray().slice()
     : ChatStore.getModelsArray().slice();
@@ -93,17 +102,21 @@ export async function list(
   }
 
   if (options.onlyGroups) {
-    models = models.filter((c) => c.isGroup);
+    models = models.filter((c) => c.id.isGroup());
   }
 
   if (options.onlyCommunities) {
     models = models.filter(
-      (c) => c.isGroup && c.groupMetadata?.groupType === 'COMMUNITY'
+      (c) => c.id.isGroup() && c.groupMetadata?.groupType === 'COMMUNITY'
     );
   }
 
   if (options.onlyWithUnreadMessage) {
     models = models.filter((c) => c.hasUnread);
+  }
+
+  if (options.onlyArchived) {
+    models = models.filter((c) => c.archive);
   }
 
   if (options.withLabels) {
@@ -130,9 +143,11 @@ export async function list(
   }
 
   // Attaching Group Metadata on Found Chats.
-  for (const chat of models) {
-    if (chat.isGroup) {
-      await GroupMetadataStore.find(chat.id);
+  if (!options?.ignoreGroupMetadata) {
+    for (const chat of models) {
+      if (chat.id.isGroup()) {
+        await GroupMetadataStore.find(chat.id);
+      }
     }
   }
 

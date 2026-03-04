@@ -114,7 +114,7 @@ export function injectLoader(): void {
       try {
         global.ErrorGuard.skipGuardGlobal(true);
         return global.importNamespace(id);
-      } catch (error) {}
+      } catch (_error) {}
       return null;
     } as any;
 
@@ -151,8 +151,10 @@ export function injectLoader(): void {
     await internalEv.emitAsync('webpack.ready').catch(() => null);
 
     if ((window as any).wppForceMainLoad) {
+      debug('wppForceMainLoad is set, waiting 5 seconds');
       await new Promise((resolve) => setTimeout(resolve, 5000));
     } else {
+      debug('waiting main ready');
       await waitMainReady;
     }
     isFullReady = true;
@@ -203,7 +205,7 @@ export function injectLoader(): void {
     for (const v of mainRuntimes) {
       try {
         await webpackRequire.e(v);
-      } catch (error) {
+      } catch (_error) {
         debug('load file error', webpackRequire.u(v));
       }
     }
@@ -212,20 +214,26 @@ export function injectLoader(): void {
     debug('ready to use');
     await internalEv.emitAsync('webpack.ready').catch(() => null);
 
+    debug('wppForceMainLoad', (window as any).wppForceMainLoad);
+
     if ((window as any).wppForceMainLoad) {
       await new Promise((resolve) => setTimeout(resolve, 5000));
     } else {
       await waitMainReady;
     }
 
+    debug('loading full runtime files');
+
     // Use sequential file load
     for (const v of allRuntimes) {
       try {
         await webpackRequire.e(v);
-      } catch (error) {
+      } catch (_error) {
         debug('load file error', webpackRequire.u(v));
       }
     }
+
+    debug('all runtime files loaded');
 
     isFullReady = true;
     debug('full ready to use');
@@ -267,6 +275,9 @@ export function moduleSource(moduleId: string) {
 
 const pureComponentMap = new Map<string, boolean>();
 
+// Cache for searchId results based on condition function reference
+const searchIdCache = new Map<SearchModuleCondition, string | null>();
+
 export function isReactComponent(moduleId: string) {
   if (pureComponentMap.has(moduleId)) {
     return pureComponentMap.get(moduleId);
@@ -291,6 +302,11 @@ export function searchId(
   condition: SearchModuleCondition,
   reverse = false
 ): string | null {
+  // Check cache first
+  if (searchIdCache.has(condition)) {
+    return searchIdCache.get(condition)!;
+  }
+
   let ids = Object.keys(webpackRequire.m);
 
   if (reverse) {
@@ -312,9 +328,10 @@ export function searchId(
       if (condition(module, moduleId)) {
         debug(`Module found: ${moduleId} - ${condition.toString()}`);
         clearTimeout(timer);
+        searchIdCache.set(condition, moduleId);
         return moduleId;
       }
-    } catch (error) {
+    } catch (_error) {
       continue;
     }
   }
@@ -328,14 +345,16 @@ export function searchId(
       if (condition(module, moduleId)) {
         debug(`Fallback Module found: ${moduleId} - ${condition.toString()}`);
         clearTimeout(timer);
+        searchIdCache.set(condition, moduleId);
         return moduleId;
       }
-    } catch (error) {
+    } catch (_error) {
       continue;
     }
   }
 
   debug(`Module not found: ${condition.toString()}`);
+  searchIdCache.set(condition, null);
   return null;
 }
 
@@ -383,7 +402,7 @@ export function modules(
       if (!condition || condition(module, moduleId)) {
         modules[moduleId] = module;
       }
-    } catch (error) {
+    } catch (_error) {
       continue;
     }
   }
