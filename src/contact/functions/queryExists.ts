@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { assertWid } from '../../assert';
+import Debug from 'debug';
+
 import { createWid } from '../../util/createWid';
 import { ApiContact, USyncQuery, USyncUser, Wid } from '../../whatsapp';
 import * as DBCreateLidPnMappings from '../../whatsapp/misc/DBCreateLidPnMappings';
@@ -40,6 +41,80 @@ export interface QueryExistsResult {
 }
 
 const cache = new Map<string, QueryExistsResult | null>();
+const debug = Debug('WA-JS:contact:queryExists');
+const SUCCESS_CACHE_TTL = 5 * 60 * 1000;
+const FAILURE_CACHE_TTL = 15 * 1000;
+
+function scheduleCacheInvalidation(cacheKey: string, ttl: number): void {
+  const timeout = setTimeout(() => {
+    cache.delete(cacheKey);
+  }, ttl);
+
+  if (typeof (timeout as any).unref === 'function') {
+    (timeout as any).unref();
+  }
+}
+
+function normalizeWid(contactId: string | Wid): Wid | null {
+  const normalized = createWid(contactId);
+  if (normalized) {
+    return normalized;
+  }
+
+  if (typeof contactId === 'string' && contactId.startsWith('+')) {
+    const fallback = createWid(contactId.slice(1));
+    if (fallback) {
+      return fallback;
+    }
+  }
+
+  debug('Invalid WID passed to queryExists', {
+    contactId,
+  });
+  return null;
+}
+
+function normalizePhoneForUser(wid: Wid): string | null {
+  const phone = wid.user?.trim();
+  if (!phone) {
+    return null;
+  }
+
+  return phone.startsWith('+') ? phone : `+${phone}`;
+}
+
+function normalizeResponseWid(value: unknown): Wid | null {
+  if (value == null) {
+    return null;
+  }
+
+  const wid = createWid(value as string | { _serialized: string });
+  if (wid) {
+    return wid;
+  }
+
+  if (typeof value === 'string') {
+    return createWid(value.startsWith('+') ? value.slice(1) : value) || null;
+  }
+
+  return null;
+}
+
+async function createMappingSafely(lid: Wid, pn: Wid): Promise<void> {
+  try {
+    await DBCreateLidPnMappings.createLidPnMappings({
+      mappings: [{ lid, pn }],
+      flushImmediately: true,
+      learningSource: 'usync',
+    });
+  } catch (error) {
+    debug('Failed to create PN<->LID mapping in queryExists', {
+      lid: lid.toString(),
+      pn: pn.toString(),
+      error,
+    });
+  }
+}
 
 /**
  * Check if the number exists and what is correct ID
@@ -57,83 +132,150 @@ const cache = new Map<string, QueryExistsResult | null>();
 export async function queryExists(
   contactId: string | Wid
 ): Promise<QueryExistsResult | null> {
-  const wid = assertWid(contactId);
-
-  const id = `+${wid.toString()}`;
-  if (cache.has(id)) {
-    return cache.get(id)!;
+  const wid = normalizeWid(contactId);
+  if (!wid) {
+    return null;
   }
 
-  const syncUser = new USyncUser();
-  const syncQuery = new USyncQuery();
-  const isLid = wid.isLid();
-  if (isLid) {
-    syncUser.withId(wid);
-  } else {
-    syncQuery.withContactProtocol();
-    syncUser.withPhone(id.replace('@c.us', ''));
-    if (wid.isUser()) {
-      const lid = ApiContact.getCurrentLid(createWid(id.replace('+', '')));
-      if (lid) {
-        syncUser.withLid(lid);
+  const cacheKey = wid.toString();
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey) ?? null;
+  }
+
+  try {
+    const syncUser = new USyncUser();
+    const syncQuery = new USyncQuery();
+
+    if (wid.isLid()) {
+      syncUser.withLid(wid);
+    } else if (wid.isUser()) {
+      syncQuery.withContactProtocol();
+
+      const phone = normalizePhoneForUser(wid);
+      if (phone) {
+        syncUser.withPhone(phone);
+      } else {
+        syncUser.withId(wid);
       }
-    }
-  }
-  syncQuery
-    .withUser(syncUser)
-    .withBusinessProtocol()
-    .withDisappearingModeProtocol()
-    .withStatusProtocol()
-    .withLidProtocol();
 
-  const get = await syncQuery.execute();
-
-  let result = null;
-
-  if (get?.error?.all || get?.error?.contact) {
-    result = null;
-  }
-  if (Array.isArray(get.list)) {
-    result = get.list[0];
-    if (result?.contact?.type === 'out') {
-      result = null;
+      const currentLid = ApiContact.getCurrentLid(wid);
+      if (currentLid) {
+        syncUser.withLid(currentLid);
+      }
     } else {
-      const lid = result?.lid;
-      result = {
-        wid: result.id,
-        biz: typeof result.business !== 'undefined',
-        bizInfo: result.business,
-        disappearingMode:
-          typeof result.disappearing_mode !== 'undefined'
-            ? {
-                duration: result.disappearing_mode?.duration,
-                settingTimestamp: result.disappearing_mode?.t,
-              }
-            : undefined,
-        status: result.status,
-        lid: lid ? createWid(lid) : undefined,
-      };
-
-      // Update the lidPnCache with the PN→LID mapping using native createLidPnMappings
-      // This updates BOTH IndexedDB and in-memory cache
-      if (result.lid && wid.isUser() && !wid.isLid()) {
-        await DBCreateLidPnMappings.createLidPnMappings({
-          mappings: [{ lid: result.lid, pn: result.wid }],
-          flushImmediately: true,
-          learningSource: 'usync',
-        });
-      }
+      syncUser.withId(wid);
     }
-  } else {
-    result = null;
+
+    syncQuery
+      .withUser(syncUser)
+      .withBusinessProtocol()
+      .withDisappearingModeProtocol()
+      .withStatusProtocol()
+      .withLidProtocol();
+
+    let response: unknown;
+    try {
+      response = await syncQuery.execute();
+    } catch (error) {
+      debug('syncQuery.execute failed in queryExists', {
+        wid: cacheKey,
+        error,
+      });
+      cache.set(cacheKey, null);
+      scheduleCacheInvalidation(cacheKey, FAILURE_CACHE_TTL);
+      return null;
+    }
+
+    const payload = response as
+      | {
+          error?: {
+            all?: unknown;
+            contact?: unknown;
+          };
+          list?: unknown;
+        }
+      | null
+      | undefined;
+
+    if (payload?.error?.all || payload?.error?.contact) {
+      cache.set(cacheKey, null);
+      scheduleCacheInvalidation(cacheKey, FAILURE_CACHE_TTL);
+      return null;
+    }
+
+    if (!Array.isArray(payload?.list)) {
+      debug('Unexpected queryExists response structure', {
+        wid: cacheKey,
+      });
+      cache.set(cacheKey, null);
+      scheduleCacheInvalidation(cacheKey, FAILURE_CACHE_TTL);
+      return null;
+    }
+
+    const entry = payload.list[0] as
+      | {
+          id?: unknown;
+          business?: QueryExistsResult['bizInfo'];
+          disappearing_mode?: {
+            duration?: number;
+            t?: number;
+          };
+          status?: unknown;
+          lid?: unknown;
+          contact?: {
+            type?: string;
+          };
+        }
+      | undefined;
+
+    if (!entry || entry.contact?.type === 'out') {
+      cache.set(cacheKey, null);
+      scheduleCacheInvalidation(cacheKey, FAILURE_CACHE_TTL);
+      return null;
+    }
+
+    const resultWid = normalizeResponseWid(entry.id);
+    if (!resultWid) {
+      debug('Unexpected queryExists id field', {
+        wid: cacheKey,
+        id: entry.id,
+      });
+      cache.set(cacheKey, null);
+      scheduleCacheInvalidation(cacheKey, FAILURE_CACHE_TTL);
+      return null;
+    }
+
+    const lid = normalizeResponseWid(entry.lid);
+    const result: QueryExistsResult = {
+      wid: resultWid,
+      biz: typeof entry.business !== 'undefined',
+      bizInfo: entry.business,
+      disappearingMode:
+        typeof entry.disappearing_mode !== 'undefined'
+          ? {
+              duration: entry.disappearing_mode?.duration ?? 0,
+              settingTimestamp: entry.disappearing_mode?.t ?? 0,
+            }
+          : undefined,
+      status: typeof entry.status === 'string' ? entry.status : undefined,
+      lid: lid ?? undefined,
+    };
+
+    cache.set(cacheKey, result);
+    scheduleCacheInvalidation(cacheKey, SUCCESS_CACHE_TTL);
+
+    if (result.lid && wid.isUser() && !wid.isLid()) {
+      void createMappingSafely(result.lid, result.wid);
+    }
+
+    return result;
+  } catch (error) {
+    debug('queryExists failed', {
+      wid: cacheKey,
+      error,
+    });
+    cache.set(cacheKey, null);
+    scheduleCacheInvalidation(cacheKey, FAILURE_CACHE_TTL);
+    return null;
   }
-  cache.set(id, result);
-
-  // Delete from cache after 5min is success or 15s for failure
-  const timeout = result ? 300000 : 15000;
-  setTimeout(() => {
-    cache.delete(id);
-  }, timeout);
-
-  return result;
 }

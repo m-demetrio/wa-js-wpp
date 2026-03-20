@@ -143,15 +143,26 @@ function applyPatch() {
     return await func(...args);
   });
 
+  wrapModuleFunction(toUserLid, (func, ...args) => {
+    const [UserWid] = args;
+
+    const currentLid =
+      functions.getCurrentLid?.(UserWid) || ContactStore.get(UserWid)?.lid;
+
+    if (currentLid?.isLid?.()) {
+      return currentLid;
+    }
+
+    return UserWid;
+  });
+
   wrapModuleFunction(getEnforceCurrentLid, (_func, ...args) => {
     const [UserWid] = args;
 
-    try {
-      const LID = toUserLid ? toUserLid(UserWid) : null;
-      return LID || UserWid;
-    } catch {
-      return UserWid;
-    }
+    const LID =
+      functions.getCurrentLid?.(UserWid) || ContactStore.get(UserWid)?.lid;
+
+    return LID?.isLid?.() ? LID : UserWid;
   });
 
   wrapModuleFunction(shouldHaveAccountLid, () => false);

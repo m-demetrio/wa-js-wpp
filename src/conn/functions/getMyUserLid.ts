@@ -15,6 +15,7 @@
  */
 
 import { UserPrefs, Wid } from '../../whatsapp';
+import { getMyUserWid } from './getMyUserWid';
 
 /**
  * Return the current logged user LID (Locally Identified) without device id
@@ -26,5 +27,5 @@ import { UserPrefs, Wid } from '../../whatsapp';
  * ```
  */
 export function getMyUserLid(): Wid {
-  return UserPrefs.getMeLidUserOrThrow();
+  return UserPrefs.getMaybeMeLidUser() || getMyUserWid();
 }

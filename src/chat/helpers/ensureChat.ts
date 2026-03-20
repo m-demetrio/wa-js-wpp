@@ -15,9 +15,10 @@
  */
 
 import { assertFindChat, assertGetChat, InvalidChat } from '../../assert';
+import { createWid } from '../../util/createWid';
 import type { ChatModel, Wid } from '../../whatsapp';
 import { ContactStore, WidFactory } from '../../whatsapp';
-import { createWid } from '../../util/createWid';
+import { createChat } from '../../whatsapp/functions';
 import { resolveChatLid } from './resolveChatLid';
 
 export interface EnsureChatOptions {
@@ -72,7 +73,7 @@ export async function ensureChat(
   chatId: WidLike,
   options: EnsureChatOptions = {}
 ): Promise<ChatModel> {
-  const { createChat = false, ensureLid = true } = options;
+  const { createChat: shouldCreateChat = false, ensureLid = true } = options;
 
   const wid = coerceWid(chatId);
   const contact = ContactStore.get(wid);
@@ -103,9 +104,7 @@ export async function ensureChat(
 
   const lid = await tryResolveLid();
   const candidateIds = Array.from(
-    new Set(
-      [lid, wid].filter((id) => id) as Wid[]
-    )
+    new Set([lid, wid].filter((id) => id) as Wid[])
   );
 
   let chat: ChatModel | undefined;
@@ -131,6 +130,48 @@ export async function ensureChat(
         }
 
         throw error;
+      }
+    }
+  }
+
+  if (!chat && shouldCreateChat) {
+    const targetId = lid?.isLid?.() ? lid : wid;
+
+    await createChat(
+      { chatId: targetId },
+      'createChat',
+      {
+        createdLocally: true,
+        lidOriginType: targetId.isLid?.() ? 'lid' : 'general',
+      },
+      {}
+    );
+
+    chat = tryGetChat(targetId);
+
+    if (!chat) {
+      for (const id of candidateIds) {
+        const existing = tryGetChat(id);
+        if (existing) {
+          chat = existing;
+          break;
+        }
+      }
+    }
+
+    if (!chat) {
+      for (const id of candidateIds) {
+        try {
+          chat = await assertFindChat(id);
+          break;
+        } catch (error) {
+          if (error instanceof InvalidChat) {
+            lastInvalid = error;
+            continue;
+          }
+
+          throw error;
+        }
       }
     }
   }
