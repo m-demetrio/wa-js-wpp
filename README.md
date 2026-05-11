@@ -14,7 +14,7 @@
 
 ## Release and build
 
-The current package version is `4.1.0-zop`. To change the build version, update the `version` field in [`package.json`](./package.json), then run `npm install` to refresh the lockfile and `npm run build:prd` to regenerate the production bundle. If you use the standard release flow, `npm run release` will bump the version, update the changelog, and publish the package.
+The current package version is `4.1.0-zop`. This repository keeps the `-zop` suffix as the local release marker, so new builds should follow the pattern `vX.X.X-zop` unless there is a deliberate reason to publish a plain upstream version. To change the build version, update the `version` field in [`package.json`](./package.json), then run `npm install` to refresh the lockfile and `npm run build:prd` to regenerate the production bundle. If you use the standard release flow, `npm run release` will bump the version, update the changelog, and publish the package.
 
 ## Chat creation fixes
 
