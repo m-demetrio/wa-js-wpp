@@ -1,5 +1,5 @@
 /*!
- * Copyright 2025 WPPConnect Team
+ * Copyright 2021 WPPConnect Team
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,16 @@
  * limitations under the License.
  */
 
-import { exportModule } from '../exportModule';
+import { internalEv } from '../../eventEmitter';
+import * as webpack from '../../webpack';
+import { ChatModel, ChatStore } from '../../whatsapp';
 
-/**
- * @whatsapp WAWebUsernameGatingUtils
- */
-export declare namespace UsernameGatingUtils {
-  /**
-   * Check if username feature is supported
-   * @whatsapp >= 2.3000.1030318976
-   * @returns true if username feature is supported
-   */
-  function usernameSupported(): boolean;
+webpack.onInjected(() => registerNewChat());
+
+function registerNewChat() {
+  ChatStore.on('add', (chat: ChatModel) => {
+    queueMicrotask(() => {
+      internalEv.emit('chat.new_chat', chat);
+    });
+  });
 }
-
-exportModule(
-  exports,
-  'UsernameGatingUtils',
-  (m) => m.usernameSupported && typeof m.usernameSupported === 'function'
-);

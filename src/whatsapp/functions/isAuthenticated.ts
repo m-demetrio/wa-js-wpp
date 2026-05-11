@@ -39,5 +39,8 @@ exportModule(
   (m) =>
     (m.Z?.toString().includes('isRegistered') &&
       m.Z?.toString().includes('getLoginTokens')) ||
-    m.isLoggedIn // whatsapp >= 2.2208.11
+    m.isLoggedIn ||
+    m.isAuthenticated ||
+    m.default?.isAuthenticated ||
+    m.default?.isLoggedIn // whatsapp >= 2.2208.11
 );

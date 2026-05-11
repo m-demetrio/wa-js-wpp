@@ -16,7 +16,7 @@
 
 import { assertWid } from '../../assert';
 import { ChatModel, GroupMetadataStore, Wid } from '../../whatsapp';
-import { findChat } from '../../whatsapp/functions';
+import { findOrCreateLatestChatSafe } from '../helpers/findOrCreateLatestChatSafe';
 
 /**
  * Find a chat by id
@@ -28,12 +28,9 @@ import { findChat } from '../../whatsapp/functions';
 export async function find(chatId: string | Wid): Promise<ChatModel> {
   const wid = assertWid(chatId);
 
-  const chat = await findChat(
-    wid,
-    wid.isLid() ? 'username_contactless_search' : 'createChat'
-  );
+  const chat = await findOrCreateLatestChatSafe(wid);
 
-  if (chat.isGroup) {
+  if (chat.id.isGroup()) {
     await GroupMetadataStore.find(chat.id);
   }
 

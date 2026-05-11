@@ -16,10 +16,9 @@
 
 import Debug from 'debug';
 
-import { assertFindChat } from '../../assert';
 import { getAnnouncementGroup } from '../../community';
 import { WPPError } from '../../util';
-import { GroupMetadataStore, MsgModel } from '../../whatsapp';
+import { ChatModel, GroupMetadataStore, MsgModel } from '../../whatsapp';
 import { ACK } from '../../whatsapp/enums';
 import {
   addAndSendMessageEdit,
@@ -34,8 +33,8 @@ import {
   RawMessage,
   SendMessageOptions,
   SendMessageReturn,
-  SendMsgResultObject,
 } from '..';
+import { ensureChat } from '../helpers/ensureChat';
 import { getMessageById, markIsRead, prepareRawMessage } from '.';
 
 const debug = Debug('WA-JS:message');
@@ -55,8 +54,9 @@ export async function sendRawMessage(
     ...options,
   };
 
-  // Always use assertFindChat to properly handle @lid chats and other cases
-  const chat = await assertFindChat(chatId);
+  const chat: ChatModel = await ensureChat(chatId, {
+    createChat: options.createChat,
+  });
 
   /**
    * When the group is groupType 'COMMUNITY', its a instance of a group created, you can
@@ -122,22 +122,16 @@ export async function sendRawMessage(
   } else {
     result = await addAndSendMsgToChat(chat, rawMessage);
   }
-
   debug(`message ${rawMessage.id} queued`);
 
   const message = await result[0];
-
-  let sendMsgResult: SendMsgResultObject | null = null;
-
   if (options.waitForAck) {
     debug(`waiting ack for ${rawMessage.id}`);
 
-    if (result[1]) {
-      sendMsgResult = await result[1];
-    }
+    const sendResult = await result[1];
 
     debug(
-      `ack received for ${rawMessage.id} (ACK: ${message.ack}, SendResult: ${sendMsgResult?.messageSendResult})`
+      `ack received for ${rawMessage.id} (ACK: ${message.ack}, SendResult: ${sendResult})`
     );
   }
 
@@ -150,9 +144,9 @@ export async function sendRawMessage(
     ...(message.from && {
       from: message.from.toString(),
     }),
-    ...(chat && {
-      to: chat.id.toString(),
+    ...(message.to && {
+      to: message.to.toString(),
     }),
-    sendMsgResult: sendMsgResult!,
+    sendMsgResult: result[1]!,
   };
 }

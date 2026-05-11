@@ -12,6 +12,40 @@
 
 > WPPConnect/WA-JS is an open-source project with the aim of exporting functions from WhatsApp Web, which can be used to support the creation of any interaction, such as customer service, media sending, intelligence recognition based on phrases and many other things, use your imagination...
 
+## Release and build
+
+The current package version is `4.1.0-zop`. This repository keeps the `-zop` suffix as the local release marker, so new builds should follow the pattern `vX.X.X-zop` unless there is a deliberate reason to publish a plain upstream version. To change the build version, update the `version` field in [`package.json`](./package.json), then run `npm install` to refresh the lockfile and `npm run build:prd` to regenerate the production bundle. If you use the standard release flow, `npm run release` will bump the version, update the changelog, and publish the package.
+
+Update rule for this repository: when asking to move wa-js to the latest available version, always preserve the local `-zop` versioning pattern, reapply the repository's chat-safety logic, regenerate the compiled artifact in `dist/wppconnect-wa.js`, and commit the result before considering the update complete.
+
+## Chat creation fixes
+
+The latest changes ensure that messages sent to contacts without local history can create the chat, resolve the **LID** correctly, and no longer depend on the fragile `findChat(..., 'createChat')` fallback.
+
+Key points:
+
+- `src/chat/helpers/ensureChat.ts` now creates the chat when `createChat: true` is provided. The helper still tries to reuse an existing chat and resolve the LID first, but it no longer fails when creation must happen inside the same flow.
+- `src/chat/helpers/findOrCreateLatestChatSafe.ts` keeps the native `findOrCreateLatestChat` attempt, but falls back to `ensureChat(..., { createChat: true })` when the native lookup cannot complete.
+- `src/chat/functions/find.ts` uses the safe flow to return the correct chat even when the contact does not yet have a local entry.
+- `src/chat/patch.ts` continues intercepting `createChatRecord` to fill `accountLid` with the resolved LID from the contact or via `queryExists`, and it retries transient write failures.
+- `src/chat/functions/sendRawMessage.ts` and `src/chat/functions/sendFileMessage.ts` remain protected against `InvalidChat`, so text and file sends can open or reuse the conversation.
+
+Calling `WPP.contact.queryExists('<number>@c.us')` before the first message is still a valid way to prepare the LID, but the sending flow can now also create the chat when needed without relying on the old path.
+
+### Building a more stable wrapper
+
+To reuse these protections in a custom wrapper, use the helpers exposed from `src/chat/helpers/ensureChat.ts` and `src/chat/helpers/resolveChatLid.ts`:
+
+1. Whenever you need to load a chat before sending a message, call `ensureChat(chatId, { createChat: true/false })`. The helper tries to reuse the existing chat, resolves the LID automatically, and when `createChat: true` creates the conversation if it does not exist yet.
+2. If you need to sync the LID manually, call `resolveChatLid(chatId)` directly. The function keeps an internal cache and updates `ContactStore`, avoiding duplicate server calls.
+3. In your sending functions, reuse the chat returned by `ensureChat` to build the message and continue with `sendRawMessage`/`sendFileMessage`. That keeps the conversation ready for IndexedDB persistence without `Lid is missing` errors.
+
+The helpers are exported from the main package (`import { ensureChat } from 'wppconnect/wa-js/chat'`), which makes it easier to build a stable API without duplicating internal code.
+
+### Technical notes
+
+For a consolidated view of the issues addressed here, see [`BUGFIXES.md`](./BUGFIXES.md). It also includes quick usage guidance and optimization notes.
+
 ## Our online channels
 
 [![Discussions](https://img.shields.io/github/discussions/wppconnect-team/wa-js?label=Discussions&logo=github)](https://github.com/wppconnect-team/wa-js/discussions)
@@ -168,6 +202,28 @@ To debug or inspect `wa-source` folder, format the files to be easier to underst
 ```sh
 npm run wa-source:format
 ```
+
+### Comparing WhatsApp Web Versions
+
+To compare changes between two WhatsApp Web versions, use the helper script:
+
+Note: You need to run locally in multiple versions to download the scripts to wa-source folder, otherwise will not have anything to compare. To do it use: `WA_VERSION="<version-here>" npm run launch:local`
+
+```bash
+# Compare two versions (overview of module differences)
+./scripts/compare-wa-versions.sh 2.3000.1031980585 2.3000.1031992593
+
+# Compare a specific module between versions
+./scripts/compare-wa-versions.sh 2.3000.1031980585 2.3000.1031992593 WAWebUpdateUnreadChatAction
+
+# List available versions
+./scripts/compare-wa-versions.sh
+```
+
+This is useful for:
+- Tracking API changes between WhatsApp Web updates
+- Identifying when function signatures changed
+- Finding new or removed modules
 
 ## How to use this project
 

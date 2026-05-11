@@ -26,10 +26,11 @@ import {
   isLidMigrated,
   isUnreadTypeMsg,
   mediaTypeFromProtobuf,
+  shouldHaveAccountLid,
   toUserLid,
   typeAttributeFromProtobuf,
 } from '../whatsapp/functions';
-import { ApiContact } from '../whatsapp/misc';
+import { resolveChatLid } from './helpers/resolveChatLid';
 
 webpack.onFullReady(applyPatch, 1000);
 webpack.onFullReady(applyPatchModel);
@@ -91,6 +92,15 @@ function applyPatch() {
   });
 
   wrapModuleFunction(createChatRecord, async (func, ...args) => {
+    const [chatId, chatRecord] = args as [ChatModel['id'], any];
+
+    if (chatRecord && !chatRecord.accountLid && chatId?.isUser?.()) {
+      const lid = await resolveChatLid(chatId);
+      if (lid) {
+        chatRecord.accountLid = lid._serialized;
+      }
+    }
+
     const maxAttempts = 5;
     let delay = 1000;
 
@@ -109,7 +119,7 @@ function applyPatch() {
   });
 
   wrapModuleFunction(findChat, async (func, ...args) => {
-    const [chatId, context] = args;
+    const [chatId] = args;
 
     if (!chatId.isLid()) {
       return await func(...args);
@@ -118,23 +128,6 @@ function applyPatch() {
     const contact = ContactStore.get(chatId);
     const existingChat = await getExisting(chatId);
     if (!existingChat && contact) {
-      // WhatsApp Web logic: For username_contactless_search context, prefer phone number if available
-      // This prevents duplicate chats (one with LID, one with phone number)
-      const VALID_USERNAME_ORIGINS = new Set([
-        'username_change_notification',
-        'username_contactless_search',
-      ]);
-      const phoneNumberWid = ApiContact.getPhoneNumber(chatId);
-      const shouldUsePhoneNumber =
-        VALID_USERNAME_ORIGINS.has(context) && phoneNumberWid != null;
-
-      if (shouldUsePhoneNumber) {
-        // Use the phone number WID to create/find the chat
-        // Call findChat with the phone number instead of LID
-        return await findChat(phoneNumberWid, context);
-      }
-
-      // Create with LID for other contexts
       const chatParams: any = { chatId };
       await createChat(
         chatParams,
@@ -150,16 +143,29 @@ function applyPatch() {
     return await func(...args);
   });
 
+  wrapModuleFunction(toUserLid, (func, ...args) => {
+    const [UserWid] = args;
+
+    const currentLid =
+      functions.getCurrentLid?.(UserWid) || ContactStore.get(UserWid)?.lid;
+
+    if (currentLid?.isLid?.()) {
+      return currentLid;
+    }
+
+    return UserWid;
+  });
+
   wrapModuleFunction(getEnforceCurrentLid, (_func, ...args) => {
     const [UserWid] = args;
 
-    try {
-      const LID = toUserLid ? toUserLid(UserWid) : null;
-      return LID || UserWid;
-    } catch {
-      return UserWid;
-    }
+    const LID =
+      functions.getCurrentLid?.(UserWid) || ContactStore.get(UserWid)?.lid;
+
+    return LID?.isLid?.() ? LID : UserWid;
   });
+
+  wrapModuleFunction(shouldHaveAccountLid, () => false);
 
   wrapModuleFunction(isLidMigrated, (func, ...args) => {
     try {
@@ -175,10 +181,10 @@ function applyPatchModel() {
     [key: string]: (...args: any[]) => any;
   } = {
     shouldAppearInList: functions.getShouldAppearInList,
-    isUser: (chat: ChatModel) => chat.id.isUser(),
-    isPSA: (chat: ChatModel) => chat.id.isPSA(),
-    isGroup: (chat: ChatModel) => chat.id.isGroup(),
-    isNewsletter: (chat: ChatModel) => chat.id.isNewsletter(),
+    isUser: functions.getIsUser,
+    isPSA: functions.getIsPSA,
+    isGroup: functions.getIsGroup,
+    isNewsletter: functions.getIsNewsletter,
     previewMessage: functions.getPreviewMessage,
     showChangeNumberNotification: functions.getShowChangeNumberNotification,
     hasUnread: functions.getHasUnread,

@@ -26,6 +26,7 @@ import {
 
 interface Props {
   id: Wid;
+  lid?: Wid;
   name?: any;
   shortName?: any;
   pushname?: any;
@@ -236,6 +237,7 @@ export declare interface ContactModel extends ModelProxy<
  */
 export declare class ContactModel extends Model<ContactCollection> {
   idClass: typeof Wid;
+  lid?: Wid;
   constructor(
     proterties?: ModelPropertiesContructor<ContactModel>,
     options?: ModelOptions

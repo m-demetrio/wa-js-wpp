@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-import { assertFindChat, assertWid } from '../../assert';
+import { assertWid } from '../../assert';
+import { isWhatsAppVersionLTE } from '../../conn/functions/getBuildConstants';
 import { Cmd, Wid } from '../../whatsapp';
+import { findOrCreateLatestChatSafe } from '../helpers/findOrCreateLatestChatSafe';
 
 /**
  * Open the chat in the WhatsApp interface from first unread message
@@ -35,11 +37,13 @@ export async function openChatFromUnread(
 ): Promise<boolean> {
   const wid = assertWid(chatId);
 
-  const chat = await assertFindChat(wid);
+  const chat = await findOrCreateLatestChatSafe(wid);
 
-  try {
+  // WhatsApp changed from positional to named params in version 2.3000.1029960097
+  if (isWhatsAppVersionLTE('2.3000.1029960097')) {
+    // Legacy: use positional params for older versions
     return await Cmd.openChatFromUnread(chat);
-  } catch {
-    return await Cmd.openChatFromUnread({ chat, chatEntryPoint });
   }
+
+  return await Cmd.openChatFromUnread({ chat, chatEntryPoint });
 }

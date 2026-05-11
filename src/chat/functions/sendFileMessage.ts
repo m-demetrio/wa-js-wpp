@@ -16,20 +16,14 @@
 
 import Debug from 'debug';
 
-import { assertFindChat } from '../../assert';
 import {
   blobToArrayBuffer,
-  convertToFile,
   createWid,
   getVideoInfoFromBuffer,
   WPPError,
 } from '../../util';
-import {
-  formatFileSize,
-  getMediaTypeForValidation,
-} from '../../util/fileHelpers';
+import { convertToFile } from '../../util/convertToFile';
 import * as webpack from '../../webpack';
-import * as whatsapp from '../../whatsapp';
 import {
   ChatModel,
   MediaPrep,
@@ -54,6 +48,7 @@ import {
   SendMessageOptions,
   SendMessageReturn,
 } from '..';
+import { ensureChat } from '../helpers/ensureChat';
 import {
   getMessageById,
   markIsRead,
@@ -275,51 +270,18 @@ export async function sendFileMessage(
     ...options,
   };
 
-  let chat: ChatModel;
+  let chat: ChatModel = await ensureChat(chatId, {
+    createChat: options.createChat,
+  });
   if (chatId?.toString() == 'status@broadcast') {
     chat = new ChatModel({
       id: createWid(STATUS_JID),
     });
-  } else {
-    chat = await assertFindChat(chatId);
   }
 
   const file = await convertToFile(content, options.mimetype, options.filename);
 
   const filename = file.name;
-
-  // Determine media type for file size validation
-  const mediaType = getMediaTypeForValidation(options.type, file.type);
-  const isStatusMedia = chatId?.toString() === 'status@broadcast';
-
-  // Validate file size before processing
-  try {
-    const isStatusOrigin = isStatusMedia
-      ? 'STATUS_TAB_CAMERA_PHOTO_LIBRARY'
-      : null;
-
-    const limit = whatsapp.MediaGatingUtils.getUploadLimit(
-      mediaType,
-      isStatusOrigin
-    );
-
-    debug(
-      `Validating file size: ${file.size} bytes, limit for ${mediaType}: ${limit} bytes`
-    );
-
-    if (file.size > limit) {
-      throw new WPPError(
-        'file_too_large',
-        `File size ${formatFileSize(file.size)} exceeds the upload limit of ${formatFileSize(limit)} for ${mediaType} files`,
-        { fileSize: file.size, limit, mediaType }
-      );
-    }
-  } catch (error) {
-    // If it's already our WPPError, re-throw it
-    if (error instanceof WPPError) {
-      throw error;
-    }
-  }
 
   const opaqueData = await OpaqueData.createFromData(file, file.type);
 
@@ -393,14 +355,23 @@ export async function sendFileMessage(
     mediaData.fullWidth = 1128;
   }
   debug(`sending message (${options.type}) with id ${rawMessage.id}`);
-  const sendMsgResult = mediaPrep.sendToChat(chat, {
+
+  const processedOptions: any = {
     caption: options.caption,
     footer: options.footer,
     isViewOnce,
     productMsgOptions: chatId === 'status@broadcast' ? undefined : rawMessage,
     addEvenWhilePreparing: false,
     type: rawMessage.type,
-  } as any);
+  };
+
+  let sendMsgResult;
+
+  if (mediaPrep.sendToChat.length === 1) {
+    sendMsgResult = mediaPrep.sendToChat({ chat, options: processedOptions });
+  } else {
+    sendMsgResult = mediaPrep.sendToChat(chat, processedOptions);
+  }
   // Wait for message register
   let message: any = null;
 
@@ -446,7 +417,7 @@ export async function sendFileMessage(
       const sendResult = await sendMsgResult;
 
       debug(
-        `ack received for ${message.id} (ACK: ${message.ack}, SendResult: ${JSON.stringify(sendResult)})`
+        `ack received for ${message.id} (ACK: ${message.ack}, SendResult: ${sendResult})`
       );
     }
 
@@ -490,19 +461,17 @@ export async function sendFileMessage(
  * Generate a white thumbnail as WhatsApp generate for video files
  */
 function generateWhiteThumb(width: number, height: number, maxSize: number) {
-  let r = height ?? maxSize;
-  let i = width ?? maxSize;
+  let r = null != height ? height : maxSize,
+    i = null != width ? width : maxSize;
 
   if (r > i) {
     if (r > maxSize) {
       i *= maxSize / r;
       r = maxSize;
     }
-  } else {
-    if (i > maxSize) {
-      r *= maxSize / i;
-      i = maxSize;
-    }
+  } else if (i > maxSize) {
+    r *= maxSize / i;
+    i = maxSize;
   }
 
   const bounds = { width: Math.max(r, 1), height: Math.max(i, 1) };

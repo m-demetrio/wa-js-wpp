@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import { assertFindChat, assertWid } from '../../assert';
 import { Cmd, Wid } from '../../whatsapp';
 import { getSearchContext } from '../../whatsapp/functions';
+import { ensureChat } from '../helpers';
 import { getMessageById } from '.';
 
 /**
@@ -36,9 +36,7 @@ export async function openChatAt(
   messageId: string,
   chatEntryPoint?: string | undefined
 ): Promise<boolean> {
-  const wid = assertWid(chatId);
-
-  const chat = await assertFindChat(wid);
+  const chat = await ensureChat(chatId);
 
   const msg = await getMessageById(messageId);
 

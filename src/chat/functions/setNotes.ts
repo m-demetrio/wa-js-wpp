@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import { assertGetChat } from '../../assert';
 import { isBusiness } from '../../profile';
 import { WPPError } from '../../util';
 import { NoteModel, Wid } from '../../whatsapp';
@@ -22,6 +21,7 @@ import {
   addOrEditNoteAction,
   retrieveOnlyNoteForChatJid,
 } from '../../whatsapp/functions/addOrEditNoteAction';
+import { ensureChat } from '../helpers';
 
 /**
  * Set notes for a contact
@@ -36,7 +36,7 @@ export async function setNotes(
   chatId: string | Wid,
   content: string
 ): Promise<NoteModel | null> {
-  const chat = assertGetChat(chatId);
+  const chat = await ensureChat(chatId);
   if (!isBusiness()) {
     throw new WPPError(
       'connected_device_not_is_business',
@@ -47,7 +47,7 @@ export async function setNotes(
       'missing_content_for_notes',
       `Missing content for notes`
     );
-  } else if (chat.isGroup) {
+  } else if (chat.id.isGroup()) {
     throw new WPPError(
       'can_not_set_notes_for_groups',
       `You can not set notes for groups. ChatId: ${chatId}`
