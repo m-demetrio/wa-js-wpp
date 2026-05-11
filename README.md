@@ -16,6 +16,8 @@
 
 The current package version is `4.1.0-zop`. This repository keeps the `-zop` suffix as the local release marker, so new builds should follow the pattern `vX.X.X-zop` unless there is a deliberate reason to publish a plain upstream version. To change the build version, update the `version` field in [`package.json`](./package.json), then run `npm install` to refresh the lockfile and `npm run build:prd` to regenerate the production bundle. If you use the standard release flow, `npm run release` will bump the version, update the changelog, and publish the package.
 
+Update rule for this repository: when asking to move wa-js to the latest available version, always preserve the local `-zop` versioning pattern, reapply the repository's chat-safety logic, regenerate the compiled artifact in `dist/wppconnect-wa.js`, and commit the result before considering the update complete.
+
 ## Chat creation fixes
 
 The latest changes ensure that messages sent to contacts without local history can create the chat, resolve the **LID** correctly, and no longer depend on the fragile `findChat(..., 'createChat')` fallback.
