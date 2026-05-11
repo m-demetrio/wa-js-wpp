@@ -28,7 +28,8 @@ function isMissingLidError(error: unknown): boolean {
  *
  * WhatsApp's `findOrCreateLatestChat` can throw for PN-only users when the
  * account has not been migrated to LID yet. In that case we fall back to the
- * safer `findChat(..., 'createChat')` path used by the local wrappers.
+ * local `ensureChat(..., { createChat: true })` path, which now creates the
+ * chat directly when the native lookup cannot complete.
  */
 export async function findOrCreateLatestChatSafe(wid: Wid): Promise<ChatModel> {
   const lookupWid = wid.isUser?.() ? ((await resolveChatLid(wid)) ?? wid) : wid;

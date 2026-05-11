@@ -12,34 +12,37 @@
 
 > WPPConnect/WA-JS is an open-source project with the aim of exporting functions from WhatsApp Web, which can be used to support the creation of any interaction, such as customer service, media sending, intelligence recognition based on phrases and many other things, use your imagination...
 
-## Notas de versão e build
+## Release and build
 
-Para alterar o número de versão utilizado nos builds execute a atualização no campo `version` do arquivo [`package.json`](./package.json). Após ajustar o valor, recomenda-se rodar `npm install` (para atualizar o lockfile) e o comando de build desejado, por exemplo `npm run build:prd`. Caso utilize o fluxo de releases oficial, também é possível disparar `npm run release`, que aplica o `version bump`, atualiza o changelog e publica o pacote.
+The current package version is `4.1.0`. To change the build version, update the `version` field in [`package.json`](./package.json), then run `npm install` to refresh the lockfile and `npm run build:prd` to regenerate the production bundle. If you use the standard release flow, `npm run release` will bump the version, update the changelog, and publish the package.
 
-## Documentação das correções relacionadas à criação de chats
+## Chat creation fixes
 
-As alterações recentes garantem que mensagens enviadas para contatos sem histórico local criem o chat e preencham corretamente o **LID** antes da persistência. Os principais pontos são:
+The latest changes ensure that messages sent to contacts without local history can create the chat, resolve the **LID** correctly, and no longer depend on the fragile `findChat(..., 'createChat')` fallback.
 
-- `src/chat/patch.ts` intercepta `createChatRecord` para preencher `accountLid` com o LID resolvido a partir do contato ou via `queryExists`, além de tentar novamente a gravação em caso de erros transitórios. O mesmo arquivo mantém uma cache simples de LIDs em `ContactStore` e preserva os patches já existentes para conversão de LIDs.
-- `src/chat/functions/sendRawMessage.ts` tenta novamente obter o chat via `assertFindChat` quando `assertGetChat` lança `InvalidChat`, permitindo que mensagens de texto abram novos chats automaticamente.
-- `src/chat/functions/sendFileMessage.ts` replica a lógica de fallback para `InvalidChat`, permitindo que o envio de arquivos também gere o chat quando necessário.
-- `src/whatsapp/models/ContactModel.ts` expõe a propriedade opcional `lid`, possibilitando armazenar o identificador resolvido do contato no cache local.
+Key points:
 
-Com essas mudanças, chamar `WPP.contact.queryExists('<numero>@c.us')` antes da primeira mensagem garante que o LID esteja disponível e evita falhas de persistência ao enviar textos ou arquivos.
+- `src/chat/helpers/ensureChat.ts` now creates the chat when `createChat: true` is provided. The helper still tries to reuse an existing chat and resolve the LID first, but it no longer fails when creation must happen inside the same flow.
+- `src/chat/helpers/findOrCreateLatestChatSafe.ts` keeps the native `findOrCreateLatestChat` attempt, but falls back to `ensureChat(..., { createChat: true })` when the native lookup cannot complete.
+- `src/chat/functions/find.ts` uses the safe flow to return the correct chat even when the contact does not yet have a local entry.
+- `src/chat/patch.ts` continues intercepting `createChatRecord` to fill `accountLid` with the resolved LID from the contact or via `queryExists`, and it retries transient write failures.
+- `src/chat/functions/sendRawMessage.ts` and `src/chat/functions/sendFileMessage.ts` remain protected against `InvalidChat`, so text and file sends can open or reuse the conversation.
 
-### Criando uma biblioteca própria mais estável
+Calling `WPP.contact.queryExists('<number>@c.us')` before the first message is still a valid way to prepare the LID, but the sending flow can now also create the chat when needed without relying on the old path.
 
-Para reutilizar essas proteções em uma biblioteca personalizada (por exemplo, quando você cria um _wrapper_ com todas as funções do `WPP.chat`), utilize os _helpers_ expostos em `src/chat/helpers/ensureChat.ts` e `src/chat/helpers/resolveChatLid.ts`:
+### Building a more stable wrapper
 
-1. Sempre que for recuperar um chat antes de enviar qualquer mensagem, chame `ensureChat(chatId, { createChat: true/false })`. Esse helper unifica a lógica de _fallback_ (`assertGetChat` → `assertFindChat`) e garante que o LID seja resolvido automaticamente.
-2. Caso precise sincronizar o LID manualmente (por exemplo, em rotinas batch), você pode chamar `resolveChatLid(chatId)` diretamente. A função mantém um cache interno e atualiza o `ContactStore`, evitando chamadas duplicadas ao servidor.
-3. Nas suas funções de envio, reutilize o mesmo chat retornado por `ensureChat` para montar a mensagem e seguir com `sendRawMessage`/`sendFileMessage`. Isso garante que a conversa já esteja pronta para persistir no IndexedDB sem erros de `Lid is missing`.
+To reuse these protections in a custom wrapper, use the helpers exposed from `src/chat/helpers/ensureChat.ts` and `src/chat/helpers/resolveChatLid.ts`:
 
-Exportamos os helpers no pacote principal (`import { ensureChat } from 'wppconnect/wa-js/chat'`), o que facilita a criação de uma API estável sem duplicar código interno.
+1. Whenever you need to load a chat before sending a message, call `ensureChat(chatId, { createChat: true/false })`. The helper tries to reuse the existing chat, resolves the LID automatically, and when `createChat: true` creates the conversation if it does not exist yet.
+2. If you need to sync the LID manually, call `resolveChatLid(chatId)` directly. The function keeps an internal cache and updates `ContactStore`, avoiding duplicate server calls.
+3. In your sending functions, reuse the chat returned by `ensureChat` to build the message and continue with `sendRawMessage`/`sendFileMessage`. That keeps the conversation ready for IndexedDB persistence without `Lid is missing` errors.
 
-### Detalhamento técnico das correções
+The helpers are exported from the main package (`import { ensureChat } from 'wppconnect/wa-js/chat'`), which makes it easier to build a stable API without duplicating internal code.
 
-Para uma visão consolidada em português sobre os problemas encontrados (LID ausente, duplicação de chats, falhas em PTT/PTV e módulos internos) e as soluções aplicadas, consulte o arquivo [`BUGFIXES.md`](./BUGFIXES.md). Lá também há recomendações rápidas de uso e notas de otimização.
+### Technical notes
+
+For a consolidated view of the issues addressed here, see [`BUGFIXES.md`](./BUGFIXES.md). It also includes quick usage guidance and optimization notes.
 
 ## Our online channels
 

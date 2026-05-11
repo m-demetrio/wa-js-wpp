@@ -1,25 +1,25 @@
-# Registro de correções recentes
+# Bugfix Notes
 
-## Contexto geral
+## Overview
 
-As correções abaixo estabilizam envios para contatos novos ou migrados para LID e evitam falhas de autenticação ou de módulos internos quando o bundle do WhatsApp Web muda. Elas contemplam envios de texto, arquivos, PTT/áudio, PTV/vídeo curto e operações de etiquetas.
+These fixes stabilize sending flows for new contacts or contacts migrated to LID and reduce failures caused by internal module changes when the WhatsApp Web bundle changes. They cover text, files, PTT/audio, short video/PTV, and label operations.
 
-## Principais ajustes aplicados
+## Applied changes
 
-- **Normalização de IDs de chat**: qualquer identificador numérico ou sufixado (`@c.us`, `@g.us`, `@lid`) é convertido para um `Wid` antes de buscar ou criar o chat. Isso previne erros como `Invalid wid` e evita criar chats duplicados para o mesmo contato.
-- **Resolução de LID antes de escrever no armazenamento**: sempre que um chat for de usuário, o LID é resolvido ou reaproveitado do contato para manter o registro consistente com a base do WhatsApp Web, eliminando "Chat not found" ao enviar mensagens ou aplicar etiquetas.
-- **Fallback seguro para criação de chat**: operações que exigem chat (envio de mídia, arquivar, fixar, marcar lido/gravando, etiquetas) passam pelo helper centralizado `ensureChat`, garantindo que um chat existente seja reutilizado e que só seja criado um novo quando realmente necessário.
-- **Compatibilidade com PTT e PTV**: o fluxo de resolução de chat foi unificado para que áudios PTT e vídeos PTV usem o mesmo caminho seguro de resolução de LID, evitando falhas específicas dessas mídias.
-- **Abertura e encaminhamento resilientes**: funções de interface (abrir chat no WhatsApp Web, posicionar em uma mensagem, começar do primeiro não lido e encaminhar mensagens) agora também usam o helper, aceitando números puros ou WIDs clássicos sem gerar duplicidade ou `Invalid wid`.
-- **Itens não lidos normalizados**: os eventos de `chat.unread_count_changed` passaram a deduplicar pelo `_serialized` do chat e as funções de abertura aceitam `ChatModel`, WID ou número puro, evitando erros ao clicar em notificações de não lidas quando o contato migrou para LID.
-- **Recuperação de módulos internos**: as heurísticas para localizar módulos como autenticação, rede e stream foram ampliadas para lidar com exportações `default` ou nomes alternativos quando o bundle é atualizado.
+- **Chat ID normalization**: any numeric or suffixed identifier (`@c.us`, `@g.us`, `@lid`) is converted to a `Wid` before fetching or creating the chat. This prevents `Invalid wid` errors and avoids duplicate chats for the same contact.
+- **LID resolution before storage writes**: whenever a chat belongs to a user, the LID is resolved or reused from the contact to keep storage aligned with WhatsApp Web and avoid "Chat not found" during message sends or label updates.
+- **Safe chat creation fallback**: operations that need a chat, such as media sending, archive, pin, mark read/recording, and labels, go through the centralized `ensureChat` helper. Existing chats are reused and a new one is created only when required.
+- **PTT and PTV compatibility**: chat resolution is unified so PTT audio and PTV video use the same safe LID resolution path, avoiding media-specific failures.
+- **Resilient open and forward flows**: UI-facing functions like opening a chat, jumping to a message, starting from the first unread message, and forwarding messages also use the helper. They accept plain numbers or classic WIDs without duplication or `Invalid wid`.
+- **Unread item normalization**: `chat.unread_count_changed` events now deduplicate by chat `_serialized`, and open-chat functions accept `ChatModel`, `Wid`, or a plain number, preventing errors when clicking unread notifications after a contact migrates to LID.
+- **Internal module recovery**: module lookup heuristics for auth, network, and stream were widened to handle `default` exports or alternate names when the bundle is updated.
 
-## Boas práticas de uso
+## Usage notes
 
-- Ao enviar para um número puro, o helper adiciona automaticamente o sufixo correto, então chamadas como `sendTextMessage('5511999999999', 'Olá')` funcionarão sem lançar exceção.
-- Para novos contatos, continue usando `sendFileMessage`/`sendTextMessage`; o helper garantirá que o chat e o LID existam antes do envio, sem necessidade de chamadas extras de criação de chat.
+- When sending to a plain number, the helper automatically adds the right suffix, so calls such as `sendTextMessage('5511999999999', 'Hello')` work without throwing.
+- For new contacts, keep using `sendFileMessage` and `sendTextMessage`; the helper makes sure the chat and LID exist before sending, without extra chat-creation calls.
 
-## Notas de otimização
+## Optimization notes
 
-- A resolução de LID agora é reutilizada dentro do mesmo fluxo de envio, reduzindo chamadas redundantes à API interna e deixando o helper mais leve sem alterar o comportamento.
-- Caso precise de bundles menores, considere ativar divisão de código (`import()` dinâmico) em projetos que consumam esta lib; os _warnings_ de tamanho do webpack são apenas informativos e não impedem o build.
+- LID resolution is reused within the same send flow, which reduces redundant internal API calls and keeps the helper lighter without changing behavior.
+- If you need smaller bundles, consider code splitting with dynamic `import()` in downstream projects; the webpack size warnings are informational and do not block the build.
