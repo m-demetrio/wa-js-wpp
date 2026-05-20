@@ -15,5 +15,6 @@
  */
 
 export * from './ensureChat';
+export * from './findChatByContactPhone';
 export * from './getWidCandidates';
 export * from './resolveChatLid';

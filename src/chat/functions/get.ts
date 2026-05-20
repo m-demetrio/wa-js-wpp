@@ -16,7 +16,7 @@
 
 import { assertWid } from '../../assert';
 import { ChatModel, ChatStore, NewsletterStore, Wid } from '../../whatsapp';
-import { getWidCandidates } from '../helpers';
+import { findChatByContactPhone, getWidCandidates } from '../helpers';
 
 /**
  * Find a chat by id
@@ -43,6 +43,11 @@ export function get(chatId: string | Wid): ChatModel | undefined {
     if (chat) {
       return chat;
     }
+  }
+
+  const chatByPhone = findChatByContactPhone(wid);
+  if (chatByPhone) {
+    return chatByPhone;
   }
 
   return undefined;
