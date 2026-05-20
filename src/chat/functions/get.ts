@@ -15,7 +15,8 @@
  */
 
 import { assertWid } from '../../assert';
-import { ChatModel, ChatStore, NewsletterStore, Wid } from '../../whatsapp';
+import type { ChatModel, Wid } from '../../whatsapp';
+import { ChatStore, NewsletterStore } from '../../whatsapp';
 import { findChatByContactPhone, getWidCandidates } from '../helpers';
 
 /**

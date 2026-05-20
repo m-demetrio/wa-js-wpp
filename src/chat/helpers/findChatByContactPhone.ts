@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { ChatStore, Wid } from '../../whatsapp';
+import type { Wid } from '../../whatsapp';
+import { ChatStore } from '../../whatsapp';
 import type { ChatModel } from '../../whatsapp/models';
 
 interface ContactLike {

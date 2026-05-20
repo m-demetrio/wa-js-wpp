@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { ContactStore, Wid } from '../../whatsapp';
+import type { Wid } from '../../whatsapp';
+import { ContactStore } from '../../whatsapp';
 
 function pushUnique(candidates: Wid[], candidate: Wid | undefined) {
   if (!candidate) {

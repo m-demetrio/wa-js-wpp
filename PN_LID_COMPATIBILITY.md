@@ -25,6 +25,7 @@ The result is a false negative lookup rather than a real missing chat.
 
 ## What Changed
 
+- `createWid` now parses serialized IDs into `user` and `server` before calling `WidFactory`, so `@lid`, `@c.us`, `@g.us`, and `@broadcast` are handled without passing the whole ID as the user part.
 - `chat.get` now tries the requested Wid first, then reuses local contact information to resolve alternative PN/LID candidates before returning `undefined`.
 - `chat.get` remains synchronous and local, but now also checks loaded chats for a matching `contact.phoneNumber`/`__x_phoneNumber` when the caller passes a PN in `@c.us`.
 - That extra fallback can return a chat stored as `@lid` as long as the loaded chat exposes the phone mapping on its contact.
