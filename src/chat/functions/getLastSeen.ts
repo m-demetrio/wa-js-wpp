@@ -15,7 +15,8 @@
  */
 
 import { assertWid } from '../../assert';
-import { ChatStore, Wid } from '../../whatsapp';
+import { Wid } from '../../whatsapp';
+import { get as getChat } from './get';
 
 /**
  * Get timestamp of last seen
@@ -29,7 +30,7 @@ export async function getLastSeen(
   chatId: string | Wid
 ): Promise<number | boolean> {
   const wid = assertWid(chatId);
-  const chat = await ChatStore.get(wid);
+  const chat = getChat(wid);
   if (!chat) {
     return false;
   }

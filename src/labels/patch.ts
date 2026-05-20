@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { ChatStore, LabelModel } from '../whatsapp';
+import { get as getChat } from '../chat/functions/get';
+import { LabelModel } from '../whatsapp';
 
 // Fix for an error that included archived chats in the total count
 // Archived chats should not be counted since they do not appear in WhatsApp
@@ -23,7 +24,7 @@ export function patchLabelCount(label: LabelModel): number {
   for (const item of (label as any).labelItemCollection._models) {
     if (item.parentType !== 'Chat') continue;
 
-    const chat = ChatStore.get(item.parentId);
+    const chat = getChat(item.parentId);
     if (!chat?.archive) count += 1;
   }
   return count;

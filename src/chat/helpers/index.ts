@@ -15,4 +15,5 @@
  */
 
 export * from './ensureChat';
+export * from './getWidCandidates';
 export * from './resolveChatLid';
