@@ -14,73 +14,77 @@
  * limitations under the License.
  */
 
-import { Wid, WidFactory } from '../whatsapp';
+import { Wid } from '../whatsapp';
 
-function getWidFactory(): any {
-  // Prefer the imported WidFactory but guard against circular/undefined imports.
-  if (typeof WidFactory !== 'undefined' && WidFactory) return WidFactory as any;
-  // Fallback to global (if some build attaches the factories there)
-  if (typeof globalThis !== 'undefined' && (globalThis as any).WidFactory)
-    return (globalThis as any).WidFactory;
+function widToString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
+    return undefined;
+  }
+
+  const serialized = (value as { _serialized?: unknown })._serialized;
+  if (typeof serialized === 'string' && serialized) {
+    return serialized;
+  }
+
+  const toString = (value as { toString?: unknown }).toString;
+  if (typeof toString === 'function') {
+    const result = toString.call(value);
+    if (typeof result === 'string' && result && result !== '[object Object]') {
+      return result;
+    }
+  }
+
   return undefined;
 }
 
-const createUserWidCompat: (
-  user: string,
-  server?: string
-) => Wid | undefined = (user: string, server?: string) => {
-  const factory = getWidFactory();
-  if (!factory) return undefined;
-  if (typeof factory.createUserWidOrThrow === 'function')
-    return factory.createUserWidOrThrow(user, server);
-  if (typeof factory.createUserWid === 'function')
-    return factory.createUserWid(user, server);
-  if (typeof factory.createWid === 'function')
-    return factory.createWid(server ? `${user}@${server}` : user);
-  return undefined;
-};
+function createWidFromSerialized(id: string): Wid | undefined {
+  if (!id) {
+    return undefined;
+  }
+
+  const normalized = id.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const serialized = (() => {
+    if (/^\d+$/.test(normalized)) {
+      return `${normalized}@c.us`;
+    }
+
+    if (/^\d+-\d+$/.test(normalized)) {
+      return `${normalized}@g.us`;
+    }
+
+    if (/@\w*lid\b/.test(normalized)) {
+      return normalized;
+    }
+
+    if (/status$/.test(normalized)) {
+      return normalized.includes('@') ? normalized : `${normalized}@broadcast`;
+    }
+
+    return normalized;
+  })();
+
+  return new Wid(serialized, { intentionallyUsePrivateConstructor: true });
+}
 
 export function createWid(
-  id: string | { _serialized: string }
+  id: string | { _serialized?: unknown; toString?: unknown }
 ): Wid | undefined {
   if (!id) {
     return;
   }
 
-  const factory = getWidFactory();
-  if (factory && factory.isWidlike && factory.isWidlike(id)) {
-    return factory.createWidFromWidLike(id);
-  }
-
-  if (id && typeof id === 'object' && typeof id._serialized === 'object') {
-    id = id._serialized;
-  }
-
-  // If id is an object with _serialized string, extract it
-  if (id && typeof id === 'object' && typeof id._serialized === 'string') {
-    id = id._serialized;
-  }
-
-  if (typeof id !== 'string') {
+  const serialized = widToString(id);
+  if (!serialized) {
     return undefined;
   }
 
-  if (/@\w*lid\b/.test(id)) {
-    return createUserWidCompat(id, 'lid');
-  }
-  if (/^\d+$/.test(id)) {
-    return createUserWidCompat(id, 'c.us');
-  }
-  if (/^\d+-\d+$/.test(id)) {
-    return createUserWidCompat(id, 'g.us');
-  }
-  if (/status$/.test(id)) {
-    return createUserWidCompat(id, 'broadcast');
-  }
-
-  if (factory && typeof factory.createWid === 'function') {
-    return factory.createWid(id);
-  }
-
-  return undefined;
+  return createWidFromSerialized(serialized);
 }
