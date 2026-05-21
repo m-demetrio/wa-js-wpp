@@ -116,121 +116,11 @@ function primaryFlowName(buttons: NativeFlowButton[]): string {
   return names.every((n) => n === names[0]) ? names[0] : 'mixed';
 }
 
-// ---------------------------------------------------------------------------
-// Stanza helpers (used inside webpack.onFullReady)
-// ---------------------------------------------------------------------------
-
 function getInteractiveFromProto(proto: any) {
   return (
     proto?.viewOnceMessage?.message?.interactiveMessage ||
     proto?.interactiveMessage
   );
-}
-
-function hasNativeFlowInProto(proto: any): boolean {
-  return Boolean(
-    getInteractiveFromProto(proto)?.nativeFlowMessage?.buttons?.length
-  );
-}
-
-function hasNativeFlowInMessage(message: any): boolean {
-  return Boolean(
-    message?.nativeFlowName ||
-    (message?.interactiveType === 'native_flow' &&
-      message?.interactivePayload?.buttons?.length)
-  );
-}
-
-function getNativeFlowName(proto: any, message: any): string {
-  // 1. Media path: interactiveMessage was wrapped in viewOnceMessage by createMsgProtobuf
-  const protoButtons =
-    getInteractiveFromProto(proto)?.nativeFlowMessage?.buttons ?? [];
-  if (protoButtons.length > 0) {
-    const names = protoButtons
-      .map((b: any) => b?.name)
-      .filter((n: any): n is string => typeof n === 'string' && !!n);
-    if (names.length > 0) {
-      return names.every((n: string) => n === names[0]) ? names[0] : 'mixed';
-    }
-  }
-
-  // 2. Text path: message model carries nativeFlowName / interactivePayload
-  if (message?.nativeFlowName) return message.nativeFlowName;
-
-  const payloadButtons = message?.interactivePayload?.buttons ?? [];
-  const pNames = payloadButtons
-    .map((b: any) => b?.name)
-    .filter((n: any): n is string => typeof n === 'string' && !!n);
-  if (pNames.length > 0) {
-    return pNames.every((n: string) => n === pNames[0]) ? pNames[0] : 'mixed';
-  }
-
-  return 'quick_reply';
-}
-
-function getChatWid(message: any, stanza?: websocket.WapNode) {
-  return (
-    message?.id?.remote ||
-    message?.to ||
-    message?.from ||
-    stanza?.attrs?.to ||
-    stanza?.attrs?.from
-  );
-}
-
-function isPrivateChat(message: any, stanza?: websocket.WapNode): boolean {
-  const wid = getChatWid(message, stanza);
-  if (!wid) return false;
-  if (typeof wid.isUser === 'function') return wid.isUser();
-  if (typeof wid === 'string')
-    return /@(c\.us|lid|bot|hosted|hosted\.lid)$/.test(wid);
-  return false;
-}
-
-function hasNativeFlowBizNode(stanza: websocket.WapNode): boolean {
-  if (!Array.isArray(stanza.content)) return false;
-  return stanza.content.some((node: websocket.WapNode) => {
-    const interactive = Array.isArray(node?.content)
-      ? node.content.find(
-          (child: websocket.WapNode) => child?.tag === 'interactive'
-        )
-      : undefined;
-    return node?.tag === 'biz' && interactive?.attrs?.type === 'native_flow';
-  });
-}
-
-function hasBotNode(stanza: websocket.WapNode): boolean {
-  return Array.isArray(stanza.content)
-    ? stanza.content.some((n: websocket.WapNode) => n?.tag === 'bot')
-    : false;
-}
-
-function createNativeFlowBizNode(flowName: string): websocket.WapNode {
-  return {
-    tag: 'biz',
-    attrs: {},
-    content: [
-      {
-        tag: 'interactive',
-        attrs: { type: 'native_flow', v: '1' },
-        content: [
-          {
-            tag: 'native_flow',
-            attrs: { name: flowName },
-            content: undefined,
-          },
-        ],
-      },
-    ],
-  } as unknown as websocket.WapNode;
-}
-
-function createBotNode(): websocket.WapNode {
-  return {
-    tag: 'bot',
-    attrs: { biz_bot: '1' },
-    content: undefined,
-  } as unknown as websocket.WapNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +173,8 @@ export function prepareMessageButtons<T extends RawMessage>(
     // Text message: use the same proven path as sendPixKeyMessage.
     // WA handles type:'interactive' + interactivePayload natively — no legacy
     // isFromTemplate flag, no TemplateButtonCollection, no ack:-1.
+    // NOTE: do NOT add biz/bot stanza nodes; WA Web server rejects them with
+    //       ERROR_UNKNOWN (biz nodes are valid only in the mobile/Baileys protocol).
     message.type = 'interactive' as any;
     message.caption = message.body || message.caption || ' ';
     (message as any).nativeFlowName = flowName;
@@ -328,7 +220,7 @@ export function prepareMessageButtons<T extends RawMessage>(
 webpack.onFullReady(() => {
   // 1. Intercept protobuf build for media messages:
   //    move the media content into interactiveMessage.header, delete the top-
-  //    level media key, add deviceListMetadata, wrap in viewOnceMessage.
+  //    level media key, wrap in viewOnceMessage.
   wrapModuleFunction(createMsgProtobuf, (func, ...args) => {
     const [message] = args;
     const r = func(...args);
@@ -360,12 +252,6 @@ webpack.onFullReady(() => {
       if (typeof r.extendedTextMessage !== 'undefined')
         delete r.extendedTextMessage;
       if (typeof r.conversation !== 'undefined') delete r.conversation;
-
-      r.messageContextInfo = {
-        ...(r.messageContextInfo || {}),
-        deviceListMetadata: {},
-        deviceListMetadataVersion: 2,
-      };
 
       r.viewOnceMessage = {
         message: {
@@ -444,78 +330,47 @@ webpack.onFullReady(() => {
     return func(...args);
   });
 
-  // 5. Inject biz/bot stanza nodes required for native flow rendering on the
-  //    recipient device.  Also keep legacy biz node injection for buttonsMessage
-  //    and listMessage for backward compatibility.
+  // 5. Legacy biz node injection for buttonsMessage and listMessage.
+  //    Native flow (interactive) messages do NOT need biz nodes in WA Web —
+  //    the server rejects stanzas with biz nodes from non-mobile clients.
   wrapModuleFunction(createFanoutMsgStanza, async (func, ...args) => {
-    // createFanoutMsgStanza args layout:
-    //   args[0] = { data: MsgModel } | MsgModel
-    //   when args[0].data exists: proto = args[1]
-    //   otherwise:               proto = args[2]
-    const message = (args[0] as any)?.data || args[0];
     const proto: any = (args[0] as any)?.data ? args[1] : args[2];
 
-    const isNativeFlow =
-      hasNativeFlowInProto(proto) || hasNativeFlowInMessage(message);
-
-    // Legacy buttons / list biz node (no native flow involved)
     let legacyBizChild: websocket.WapNode | null = null;
-    if (!isNativeFlow) {
-      if (proto?.buttonsMessage) {
-        legacyBizChild = websocket.smax('buttons');
-      } else if (proto?.listMessage) {
-        const listType = 2;
-        const types = ['unknown', 'single_select', 'product_list'];
-        legacyBizChild = websocket.smax('list', {
-          v: '2',
-          type: types[listType],
-        });
-      }
+    if (proto?.buttonsMessage) {
+      legacyBizChild = websocket.smax('buttons');
+    } else if (proto?.listMessage) {
+      const listType = 2;
+      const types = ['unknown', 'single_select', 'product_list'];
+      legacyBizChild = websocket.smax('list', {
+        v: '2',
+        type: types[listType],
+      });
     }
 
     const result = await func(...args);
 
-    if (!isNativeFlow && !legacyBizChild) {
+    if (!legacyBizChild) {
       return result;
     }
 
     const stanza: websocket.WapNode = (result as any)?.stanza || result;
+    const content: websocket.WapNode[] =
+      (stanza.content as websocket.WapNode[]) || (stanza as any).stanza.content;
 
-    if (isNativeFlow && Array.isArray(stanza?.content)) {
-      const flowName = getNativeFlowName(proto, message);
-
-      if (!hasNativeFlowBizNode(stanza)) {
-        stanza.content.push(createNativeFlowBizNode(flowName));
-      }
-
-      // Private (1:1) chats also require a bot node
-      if (isPrivateChat(message, stanza) && !hasBotNode(stanza)) {
-        stanza.content.push(createBotNode());
-      }
-
-      return result;
+    let bizNode = content.find((c) => c.tag === 'biz');
+    if (!bizNode) {
+      bizNode = websocket.smax('biz', {}, null);
+      content.push(bizNode);
     }
 
-    // Legacy: inject biz > [buttons|list] node
-    if (legacyBizChild) {
-      const content: websocket.WapNode[] =
-        (stanza.content as websocket.WapNode[]) ||
-        (stanza as any).stanza.content;
+    if (!Array.isArray(bizNode.content)) bizNode.content = [];
 
-      let bizNode = content.find((c) => c.tag === 'biz');
-      if (!bizNode) {
-        bizNode = websocket.smax('biz', {}, null);
-        content.push(bizNode);
-      }
-
-      if (!Array.isArray(bizNode.content)) bizNode.content = [];
-
-      const already = (bizNode.content as websocket.WapNode[]).some(
-        (c) => c.tag === legacyBizChild!.tag
-      );
-      if (!already) {
-        (bizNode.content as websocket.WapNode[]).push(legacyBizChild);
-      }
+    const already = (bizNode.content as websocket.WapNode[]).some(
+      (c) => c.tag === legacyBizChild!.tag
+    );
+    if (!already) {
+      (bizNode.content as websocket.WapNode[]).push(legacyBizChild);
     }
 
     return result;
