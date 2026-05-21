@@ -103,39 +103,73 @@ export function prepareMessageButtons<T extends RawMessage>(
       !('phoneNumber' in button) && !('url' in button) && !('code' in button)
   );
 
-  if (isQuickReplyOnly) {
-    const quickReplyButtons = options.buttons as Array<{
-      id?: string;
-      text: string;
-    }>;
-    const nativeFlowButtons: Array<{
-      name: string;
-      buttonParamsJson: string;
-    }> = quickReplyButtons.map((button, index) => ({
-      name: 'quick_reply',
-      buttonParamsJson: JSON.stringify({
-        display_text: button.text,
-        id: button.id || `${index}`,
-      }),
-    }));
+  const nativeFlowButtons: Array<{ name: string; buttonParamsJson: string }> =
+    isQuickReplyOnly
+      ? (options.buttons as Array<{ id?: string; text: string }>).map(
+          (button, index) => ({
+            name: 'quick_reply',
+            buttonParamsJson: JSON.stringify({
+              display_text: button.text,
+              id: (button as any).id || `${index}`,
+            }),
+          })
+        )
+      : (options.buttons as Array<MessageButtonsTypes>)
+          .map((button) => {
+            if ('url' in button) {
+              return {
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({
+                  display_text: button.text,
+                  url: button.url,
+                  merchant_url: button.url,
+                }),
+              };
+            }
+            if ('phoneNumber' in button) {
+              return {
+                name: 'cta_call',
+                buttonParamsJson: JSON.stringify({
+                  display_text: button.text,
+                  phone_number: button.phoneNumber,
+                }),
+              };
+            }
+            if ('code' in button) {
+              return {
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                  display_text: button.text,
+                  copy_code: button.code,
+                }),
+              };
+            }
+            return null;
+          })
+          .filter(
+            (b): b is { name: string; buttonParamsJson: string } => b !== null
+          );
 
-    Object.assign(
-      message,
-      createInteractiveMessageEnvelope({
-        caption: message.body || message.caption || ' ',
-        footer: options.footer,
-        title: options.title,
-        includeType: false,
-        messageSecret: false,
-      })
-    );
-    message.interactiveMessage = createQuickReplyInteractiveMessage({
-      title: options.title,
-      body: message.body || message.caption || ' ',
+  const primaryNativeFlowName =
+    nativeFlowButtons.length > 0 ? nativeFlowButtons[0].name : 'quick_reply';
+
+  Object.assign(
+    message,
+    createInteractiveMessageEnvelope({
+      caption: message.body || message.caption || ' ',
       footer: options.footer,
-      buttons: nativeFlowButtons,
-    });
-  }
+      title: options.title,
+      nativeFlowName: primaryNativeFlowName,
+      includeType: false,
+      messageSecret: false,
+    })
+  );
+  message.interactiveMessage = createQuickReplyInteractiveMessage({
+    title: options.title,
+    body: message.body || message.caption || ' ',
+    footer: options.footer,
+    buttons: nativeFlowButtons,
+  });
 
   message.isFromTemplate = true;
   message.buttons = new TemplateButtonCollection();
