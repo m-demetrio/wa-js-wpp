@@ -123,8 +123,10 @@ function ensureQuickReplyBizNode(content: websocket.WapNode[]) {
   }
 }
 
-function hasNativeFlowButtons(proto: any) {
-  return Boolean(getInteractiveMessage(proto) || proto?.buttonsMessage);
+function hasNativeFlowMessage(proto: any) {
+  return Boolean(
+    getInteractiveMessage(proto)?.nativeFlowMessage?.buttons?.length
+  );
 }
 
 /**
@@ -179,7 +181,8 @@ export function prepareMessageButtons<T extends RawMessage>(
       text: options.footer || ' ',
     },
     nativeFlowMessage: {
-      buttons: options.buttons.map((button, index) => {
+      messageVersion: 1,
+      buttons: options.buttons.map((button) => {
         if ('phoneNumber' in button) {
           return {
             name: 'cta_call',
@@ -215,7 +218,7 @@ export function prepareMessageButtons<T extends RawMessage>(
           name: 'quick_reply',
           buttonParamsJson: JSON.stringify({
             display_text: button.text,
-            id: button.id || `${index}`,
+            id: button.id,
           }),
         };
       }),
@@ -223,7 +226,11 @@ export function prepareMessageButtons<T extends RawMessage>(
   };
 
   // This code is only for see buttons on sended device
-  message.isFromTemplate = true;
+  if (hasNativeFlowMessage(message)) {
+    delete (message as any).isFromTemplate;
+  } else {
+    message.isFromTemplate = true;
+  }
   message.buttons = new TemplateButtonCollection();
   message.hydratedButtons = options.buttons.map((button, index) => {
     if ('phoneNumber' in button) {
@@ -300,8 +307,16 @@ export function prepareMessageButtons<T extends RawMessage>(
 webpack.onFullReady(() => {
   wrapModuleFunction(createMsgProtobuf, (func, ...args) => {
     const [message] = args;
+    const debugMessage = message as any;
     const r = func(...args);
     const interactiveMessage = getInteractiveMessage(message);
+
+    console.debug('[native-flow] createMsgProtobuf', {
+      viewOnceInteractiveMessage:
+        debugMessage?.viewOnceMessage?.message?.interactiveMessage,
+      interactiveMessage: debugMessage?.interactiveMessage,
+      nativeFlowMessage: interactiveMessage?.nativeFlowMessage,
+    });
 
     if (interactiveMessage?.nativeFlowMessage?.buttons !== undefined) {
       const sourceInteractiveMessage =
@@ -419,6 +434,9 @@ webpack.onFullReady(() => {
     let buttonNode: websocket.WapNode | null = null;
     const proto: any = args[1].id ? args[2] : args[1];
     const interactiveMessage = getInteractiveMessage(proto);
+    const hasNativeFlow = hasNativeFlowMessage(proto);
+    const beforeContent =
+      (args[1] as any)?.content ?? (args[2] as any)?.content ?? null;
 
     if (proto.buttonsMessage) {
       buttonNode = websocket.smax('buttons');
@@ -435,23 +453,43 @@ webpack.onFullReady(() => {
       });
     }
 
+    console.debug('[native-flow] createFanoutMsgStanza:before', {
+      viewOnceInteractiveMessage:
+        proto?.viewOnceMessage?.message?.interactiveMessage,
+      interactiveMessage: proto?.interactiveMessage,
+      content: beforeContent,
+      hasNativeFlow,
+      hasButtonsMessage: Boolean(proto?.buttonsMessage),
+    });
+
     let node = await func(...args);
     if (interactiveMessage) {
       node = await encryptAndParserMsgButtons(...args, func);
     }
 
-    const content =
-      (node.content as websocket.WapNode[]) || (node as any).stanza.content;
+    const content: any[] =
+      (node as any).content ?? (node as any).stanza?.content ?? [];
 
-    if (hasNativeFlowButtons(proto)) {
-      ensureQuickReplyBizNode(content);
+    if (hasNativeFlow) {
+      ensureQuickReplyBizNode(content as websocket.WapNode[]);
     }
+
+    console.debug('[native-flow] createFanoutMsgStanza:after', {
+      content,
+      bizAdded: Boolean(content.find((c: any) => c.tag === 'biz')),
+      nativeFlowAdded: Boolean(
+        content
+          .find((c: any) => c.tag === 'biz')
+          ?.content?.find((c: any) => c.tag === 'interactive')
+          ?.content?.find((c: any) => c.tag === 'native_flow')
+      ),
+    });
 
     if (!buttonNode) {
       return node;
     }
 
-    let bizNode = content.find((c) => c.tag === 'biz');
+    let bizNode = content.find((c: any) => c.tag === 'biz');
 
     if (!bizNode) {
       bizNode = websocket.smax('biz', {}, null);
@@ -461,7 +499,9 @@ webpack.onFullReady(() => {
     let hasButtonNode = false;
 
     if (Array.isArray(bizNode.content)) {
-      hasButtonNode = !!bizNode.content.find((c) => c.tag === buttonNode?.tag);
+      hasButtonNode = !!bizNode.content.find(
+        (c: any) => c.tag === buttonNode?.tag
+      );
     } else {
       bizNode.content = [];
     }
