@@ -63,7 +63,7 @@ export interface MessageButtonsOptions {
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Button builder
 // ---------------------------------------------------------------------------
 
 type NativeFlowButton = { name: string; buttonParamsJson: string };
@@ -116,11 +116,118 @@ function primaryFlowName(buttons: NativeFlowButton[]): string {
   return names.every((n) => n === names[0]) ? names[0] : 'mixed';
 }
 
+// ---------------------------------------------------------------------------
+// Proto helpers
+// ---------------------------------------------------------------------------
+
 function getInteractiveFromProto(proto: any) {
   return (
     proto?.viewOnceMessage?.message?.interactiveMessage ||
     proto?.interactiveMessage
   );
+}
+
+// ---------------------------------------------------------------------------
+// Stanza helpers
+// ---------------------------------------------------------------------------
+
+function hasNativeFlowInProto(proto: any): boolean {
+  return Boolean(
+    getInteractiveFromProto(proto)?.nativeFlowMessage?.buttons?.length
+  );
+}
+
+function hasNativeFlowInMessage(message: any): boolean {
+  return Boolean(
+    message?.nativeFlowName ||
+    (message?.interactiveType === 'native_flow' &&
+      message?.interactivePayload?.buttons?.length)
+  );
+}
+
+function getNativeFlowName(proto: any, message: any): string {
+  const protoButtons =
+    getInteractiveFromProto(proto)?.nativeFlowMessage?.buttons ?? [];
+  if (protoButtons.length > 0) {
+    const names = protoButtons
+      .map((b: any) => b?.name)
+      .filter((n: any): n is string => typeof n === 'string' && !!n);
+    if (names.length > 0)
+      return names.every((n: string) => n === names[0]) ? names[0] : 'mixed';
+  }
+  if (message?.nativeFlowName) return message.nativeFlowName;
+  const payloadBtns = message?.interactivePayload?.buttons ?? [];
+  const pn = payloadBtns
+    .map((b: any) => b?.name)
+    .filter((n: any): n is string => typeof n === 'string' && !!n);
+  if (pn.length > 0)
+    return pn.every((n: string) => n === pn[0]) ? pn[0] : 'mixed';
+  return 'quick_reply';
+}
+
+function getChatWid(message: any, stanza?: websocket.WapNode) {
+  return (
+    message?.id?.remote ||
+    message?.to ||
+    message?.from ||
+    stanza?.attrs?.to ||
+    stanza?.attrs?.from
+  );
+}
+
+function isPrivateChat(message: any, stanza?: websocket.WapNode): boolean {
+  const wid = getChatWid(message, stanza);
+  if (!wid) return false;
+  if (typeof wid.isUser === 'function') return wid.isUser();
+  if (typeof wid === 'string')
+    return /@(c\.us|lid|bot|hosted|hosted\.lid)$/.test(wid);
+  return false;
+}
+
+function hasNativeFlowBizNode(stanza: websocket.WapNode): boolean {
+  if (!Array.isArray(stanza.content)) return false;
+  return stanza.content.some((node: websocket.WapNode) => {
+    const interactive = Array.isArray(node?.content)
+      ? node.content.find(
+          (child: websocket.WapNode) => child?.tag === 'interactive'
+        )
+      : undefined;
+    return node?.tag === 'biz' && interactive?.attrs?.type === 'native_flow';
+  });
+}
+
+function hasBotNode(stanza: websocket.WapNode): boolean {
+  return Array.isArray(stanza.content)
+    ? stanza.content.some((n: websocket.WapNode) => n?.tag === 'bot')
+    : false;
+}
+
+function createNativeFlowBizNode(flowName: string): websocket.WapNode {
+  return {
+    tag: 'biz',
+    attrs: {},
+    content: [
+      {
+        tag: 'interactive',
+        attrs: { type: 'native_flow', v: '1' },
+        content: [
+          {
+            tag: 'native_flow',
+            attrs: { name: flowName },
+            content: undefined,
+          },
+        ],
+      },
+    ],
+  } as unknown as websocket.WapNode;
+}
+
+function createBotNode(): websocket.WapNode {
+  return {
+    tag: 'bot',
+    attrs: { biz_bot: '1' },
+    content: undefined,
+  } as unknown as websocket.WapNode;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,20 +270,21 @@ export function prepareMessageButtons<T extends RawMessage>(
     );
   }
 
-  message.title = options.title;
-  message.footer = options.footer;
-
   const nativeFlowButtons = buildNativeFlowButtons(options.buttons);
   const flowName = primaryFlowName(nativeFlowButtons);
 
   if (message.type === 'chat') {
-    // Text message: use the same proven path as sendPixKeyMessage.
-    // WA handles type:'interactive' + interactivePayload natively — no legacy
-    // isFromTemplate flag, no TemplateButtonCollection, no ack:-1.
-    // NOTE: do NOT add biz/bot stanza nodes; WA Web server rejects them with
-    //       ERROR_UNKNOWN (biz nodes are valid only in the mobile/Baileys protocol).
+    // Extract text before clearing the original body field.
+    // WA's createMsgProtobuf would also produce a conversation/extendedTextMessage
+    // from `body`, creating a conflicting proto alongside the interactiveMessage
+    // and causing ERROR_UNKNOWN from the server.
+    const text = (message as any).body || message.caption || ' ';
+    delete (message as any).body;
+
     message.type = 'interactive' as any;
-    message.caption = message.body || message.caption || ' ';
+    message.caption = text;
+    message.title = options.title;
+    message.footer = options.footer;
     (message as any).nativeFlowName = flowName;
     (message as any).interactiveType = 'native_flow';
     (message as any).interactivePayload = {
@@ -190,9 +298,10 @@ export function prepareMessageButtons<T extends RawMessage>(
     return message;
   }
 
-  // Media message (image, video, document…): set interactiveMessage so the
-  // createMsgProtobuf wrapper below can embed the media into the header and
-  // wrap the whole thing in viewOnceMessage.
+  // Media message: set interactiveMessage so the createMsgProtobuf wrapper
+  // can embed the media into the header and wrap in viewOnceMessage.
+  message.title = options.title;
+  message.footer = options.footer;
   message.interactiveMessage = {
     header: {
       title: options.title || ' ',
@@ -218,9 +327,8 @@ export function prepareMessageButtons<T extends RawMessage>(
 // ---------------------------------------------------------------------------
 
 webpack.onFullReady(() => {
-  // 1. Intercept protobuf build for media messages:
-  //    move the media content into interactiveMessage.header, delete the top-
-  //    level media key, wrap in viewOnceMessage.
+  // 1. For media messages: move media content into interactiveMessage.header
+  //    and wrap the proto in viewOnceMessage.
   wrapModuleFunction(createMsgProtobuf, (func, ...args) => {
     const [message] = args;
     const r = func(...args);
@@ -238,7 +346,6 @@ webpack.onFullReady(() => {
         if (part in r) {
           const partName = part;
           if (part === 'documentWithCaptionMessage') part = 'documentMessage';
-
           message.interactiveMessage.header = {
             ...message.interactiveMessage.header,
             [`${part}`]: r[partName]?.message?.documentMessage || r[partName],
@@ -263,8 +370,7 @@ webpack.onFullReady(() => {
     return r;
   });
 
-  // 2. Drop legacy 'button' media-type attribute — keeps WA from mis-routing
-  //    the stanza as a media upload.
+  // 2. Drop legacy 'button' media-type attribute.
   wrapModuleFunction(encodeMaybeMediaType, (func, ...args) => {
     const [type] = args;
     if (type === 'button') return DROP_ATTR;
@@ -286,7 +392,7 @@ webpack.onFullReady(() => {
     return func(...args);
   });
 
-  // 4. Return the correct stanza type attribute for interactive messages.
+  // 4. Correct stanza type attribute for interactive messages.
   wrapModuleFunction(typeAttributeFromProtobuf, (func, ...args) => {
     const [proto] = args;
 
@@ -330,54 +436,81 @@ webpack.onFullReady(() => {
     return func(...args);
   });
 
-  // 5. Legacy biz node injection for buttonsMessage and listMessage.
-  //    Native flow (interactive) messages do NOT need biz nodes in WA Web —
-  //    the server rejects stanzas with biz nodes from non-mobile clients.
+  // 5. Inject biz/bot stanza nodes for native flow messages.
+  //    The biz node signals the server that this stanza carries a native flow
+  //    interactive message and is required for buttons to render on the
+  //    recipient's device.  The bot node (private chats only) is also required
+  //    per the WA protocol.
+  //
+  //    Legacy biz node for buttonsMessage / listMessage is preserved.
   wrapModuleFunction(createFanoutMsgStanza, async (func, ...args) => {
+    const message = (args[0] as any)?.data || args[0];
     const proto: any = (args[0] as any)?.data ? args[1] : args[2];
 
+    const isNativeFlow =
+      hasNativeFlowInProto(proto) || hasNativeFlowInMessage(message);
+
+    // Legacy biz node for deprecated buttonsMessage / listMessage
     let legacyBizChild: websocket.WapNode | null = null;
-    if (proto?.buttonsMessage) {
-      legacyBizChild = websocket.smax('buttons');
-    } else if (proto?.listMessage) {
-      const listType = 2;
-      const types = ['unknown', 'single_select', 'product_list'];
-      legacyBizChild = websocket.smax('list', {
-        v: '2',
-        type: types[listType],
-      });
+    if (!isNativeFlow) {
+      if (proto?.buttonsMessage) {
+        legacyBizChild = websocket.smax('buttons');
+      } else if (proto?.listMessage) {
+        const listType = 2;
+        const types = ['unknown', 'single_select', 'product_list'];
+        legacyBizChild = websocket.smax('list', {
+          v: '2',
+          type: types[listType],
+        });
+      }
     }
 
     const result = await func(...args);
 
-    if (!legacyBizChild) {
+    if (!isNativeFlow && !legacyBizChild) {
       return result;
     }
 
     const stanza: websocket.WapNode = (result as any)?.stanza || result;
-    const content: websocket.WapNode[] =
-      (stanza.content as websocket.WapNode[]) || (stanza as any).stanza.content;
 
-    let bizNode = content.find((c) => c.tag === 'biz');
-    if (!bizNode) {
-      bizNode = websocket.smax('biz', {}, null);
-      content.push(bizNode);
+    if (isNativeFlow && Array.isArray(stanza?.content)) {
+      const flowName = getNativeFlowName(proto, message);
+
+      if (!hasNativeFlowBizNode(stanza)) {
+        stanza.content.push(createNativeFlowBizNode(flowName));
+      }
+
+      // Private (1:1) chats require a bot node; groups must NOT have it
+      if (isPrivateChat(message, stanza) && !hasBotNode(stanza)) {
+        stanza.content.push(createBotNode());
+      }
+
+      return result;
     }
 
-    if (!Array.isArray(bizNode.content)) bizNode.content = [];
+    // Legacy: inject biz > [buttons|list] node
+    if (legacyBizChild) {
+      const content: websocket.WapNode[] =
+        (stanza.content as websocket.WapNode[]) ||
+        (stanza as any).stanza.content;
 
-    const already = (bizNode.content as websocket.WapNode[]).some(
-      (c) => c.tag === legacyBizChild!.tag
-    );
-    if (!already) {
-      (bizNode.content as websocket.WapNode[]).push(legacyBizChild);
+      let bizNode = content.find((c) => c.tag === 'biz');
+      if (!bizNode) {
+        bizNode = websocket.smax('biz', {}, null);
+        content.push(bizNode);
+      }
+      if (!Array.isArray(bizNode.content)) bizNode.content = [];
+      const already = (bizNode.content as websocket.WapNode[]).some(
+        (c) => c.tag === legacyBizChild!.tag
+      );
+      if (!already)
+        (bizNode.content as websocket.WapNode[]).push(legacyBizChild);
     }
 
     return result;
   });
 
-  // 6. Keep native flow functional — WA's A/B prop disables stanza unwrapping
-  //    which would strip the viewOnceMessage wrapper we rely on.
+  // 6. Prevent WA from unwrapping the viewOnceMessage wrapper.
   wrapModuleFunction(getABPropConfigValue, (func, ...args) => {
     const [key] = args;
     if (key === 'web_unwrap_message_for_stanza_attributes') return false;
