@@ -72,19 +72,10 @@ function getInteractiveMessage(proto: any) {
     proto?.viewOnceMessage?.message?.interactiveMessage ||
     proto?.viewOnceMessageV2?.message?.interactiveMessage ||
     proto?.viewOnceMessageV2Extension?.message?.interactiveMessage ||
+    proto?.ephemeralMessage?.message?.interactiveMessage ||
+    proto?.templateMessage?.message?.interactiveMessage ||
     proto?.interactiveMessage
   );
-}
-
-function getNativeFlowName(buttons: any[]): string {
-  const names = buttons.map((button) => button?.name).filter(Boolean);
-  const uniqueNames = Array.from(new Set(names));
-
-  if (uniqueNames.length === 1) {
-    return uniqueNames[0];
-  }
-
-  return 'mixed';
 }
 
 function ensureNodeContent(node: websocket.WapNode) {
@@ -95,10 +86,7 @@ function ensureNodeContent(node: websocket.WapNode) {
   return node.content as websocket.WapNode[];
 }
 
-function ensureNativeFlowBizNode(
-  content: websocket.WapNode[],
-  nativeFlowMessage: any
-) {
+function ensureQuickReplyBizNode(content: websocket.WapNode[]) {
   let bizNode = content.find((node) => node.tag === 'biz');
 
   if (!bizNode) {
@@ -121,19 +109,22 @@ function ensureNativeFlowBizNode(
   }
 
   const interactiveContent = ensureNodeContent(interactiveNode);
-  const nativeFlowName = getNativeFlowName(nativeFlowMessage.buttons || []);
   let nativeFlowNode = interactiveContent.find(
-    (node) => node.tag === 'native_flow' && node.attrs?.name === nativeFlowName
+    (node) => node.tag === 'native_flow' && node.attrs?.name === 'quick_reply'
   );
 
   if (!nativeFlowNode) {
     nativeFlowNode = websocket.smax(
       'native_flow',
-      { v: '9', name: nativeFlowName },
+      { name: 'quick_reply' },
       null
     );
     interactiveContent.push(nativeFlowNode);
   }
+}
+
+function hasNativeFlowButtons(proto: any) {
+  return Boolean(getInteractiveMessage(proto) || proto?.buttonsMessage);
 }
 
 /**
@@ -373,8 +364,10 @@ webpack.onFullReady(() => {
   wrapModuleFunction(typeAttributeFromProtobuf, (func, ...args) => {
     const [proto] = args;
 
-    if (proto?.viewOnceMessage?.interactiveMessage) {
-      const keys = Object.keys(proto?.viewOnceMessage?.interactiveMessage);
+    const interactiveMessage = getInteractiveMessage(proto);
+
+    if (interactiveMessage) {
+      const keys = Object.keys(interactiveMessage);
 
       const messagePart = [
         'documentMessage',
@@ -426,7 +419,6 @@ webpack.onFullReady(() => {
     let buttonNode: websocket.WapNode | null = null;
     const proto: any = args[1].id ? args[2] : args[1];
     const interactiveMessage = getInteractiveMessage(proto);
-    const nativeFlowMessage = interactiveMessage?.nativeFlowMessage;
 
     if (proto.buttonsMessage) {
       buttonNode = websocket.smax('buttons');
@@ -448,17 +440,11 @@ webpack.onFullReady(() => {
       node = await encryptAndParserMsgButtons(...args, func);
     }
 
-    if (!buttonNode) {
-      if (!nativeFlowMessage) {
-        return node;
-      }
-    }
-
     const content =
       (node.content as websocket.WapNode[]) || (node as any).stanza.content;
 
-    if (nativeFlowMessage) {
-      ensureNativeFlowBizNode(content, nativeFlowMessage);
+    if (hasNativeFlowButtons(proto)) {
+      ensureQuickReplyBizNode(content);
     }
 
     if (!buttonNode) {
