@@ -86,6 +86,17 @@ function ensureNodeContent(node: websocket.WapNode) {
   return node.content as websocket.WapNode[];
 }
 
+function getStanzaContent(node: any): websocket.WapNode[] {
+  const content =
+    node?.content ??
+    node?.stanza?.content ??
+    node?.node?.stanza?.content ??
+    node?.stanzaContent ??
+    [];
+
+  return Array.isArray(content) ? content : [];
+}
+
 function dumpWapNode(node: websocket.WapNode | null | undefined): any {
   if (!node) {
     return null;
@@ -486,7 +497,7 @@ webpack.onFullReady(() => {
       nodeContent: debugNode?.content,
       stanzaContent: debugNode?.stanza?.content,
     });
-    if (interactiveMessage) {
+    if (interactiveMessage && !hasNativeFlow) {
       console.log('[native-flow] fanout: before encryptAndParserMsgButtons');
       try {
         node = await encryptAndParserMsgButtons(...args, func);
@@ -501,8 +512,7 @@ webpack.onFullReady(() => {
       });
     }
 
-    const content: any[] =
-      (node as any).content ?? (node as any).stanza?.content ?? [];
+    const content: websocket.WapNode[] = getStanzaContent(node);
     console.log('[native-flow] fanout: resolved content', {
       contentLength: content?.length,
       tags: Array.isArray(content) ? content.map((c) => c?.tag) : null,
@@ -513,18 +523,19 @@ webpack.onFullReady(() => {
       ensureQuickReplyBizNode(content as websocket.WapNode[]);
     }
 
+    const bizNodeAfter = content.find((c: any) => c.tag === 'biz');
+    const interactiveNode = getStanzaContent(bizNodeAfter).find(
+      (c: any) => c.tag === 'interactive'
+    );
+    const nativeFlowNode = getStanzaContent(interactiveNode).find(
+      (c: any) => c.tag === 'native_flow'
+    );
+
     console.log('[native-flow] fanout: after ensureQuickReplyBizNode', {
-      content,
-      bizAdded: Boolean(content.find((c: any) => c.tag === 'biz')),
-      nativeFlowAdded: Boolean(
-        content
-          .find((c: any) => c.tag === 'biz')
-          ?.content?.find((c: any) => c.tag === 'interactive')
-          ?.content?.find((c: any) => c.tag === 'native_flow')
-      ),
-      bizTree: dumpWapNode(
-        content.find((c: any) => c.tag === 'biz') as websocket.WapNode
-      ),
+      tags: content.map((c) => c?.tag),
+      bizAdded: Boolean(bizNodeAfter),
+      nativeFlowAdded: Boolean(nativeFlowNode),
+      bizTree: dumpWapNode(bizNodeAfter as websocket.WapNode),
     });
 
     if (!buttonNode) {
