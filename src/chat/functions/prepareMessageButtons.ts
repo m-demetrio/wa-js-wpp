@@ -239,12 +239,8 @@ export function prepareMessageButtons<T extends RawMessage>(
     },
   };
 
-  // This code is only for see buttons on sended device
-  if (hasNativeFlowMessage(message)) {
-    delete (message as any).isFromTemplate;
-  } else {
-    message.isFromTemplate = true;
-  }
+  // Keep local button rendering enabled while testing native flow payloads.
+  message.isFromTemplate = true;
   message.buttons = new TemplateButtonCollection();
   message.hydratedButtons = options.buttons.map((button, index) => {
     if ('phoneNumber' in button) {
