@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import './nativeFlowStanzaPatch';
+
 export { archive, unarchive } from './archive';
 export { canMarkPlayed } from './canMarkPlayed';
 export { canMute } from './canMute';
