@@ -154,6 +154,16 @@ function hasNativeFlowMessage(proto: any) {
   );
 }
 
+function isQuickReplyNativeFlow(proto: any) {
+  const buttons = getInteractiveMessage(proto)?.nativeFlowMessage?.buttons;
+
+  return (
+    Array.isArray(buttons) &&
+    buttons.length > 0 &&
+    buttons.every((button: any) => button?.name === 'quick_reply')
+  );
+}
+
 /**
  * Prepare a message for buttons
  *
@@ -366,12 +376,13 @@ webpack.onFullReady(() => {
       if (typeof r.extendedTextMessage !== 'undefined')
         delete r.extendedTextMessage;
       if (typeof r.conversation !== 'undefined') delete r.conversation;
+      r.messageContextInfo = {
+        ...(r.messageContextInfo || {}),
+        deviceListMetadata: {},
+        deviceListMetadataVersion: 2,
+      };
       r.viewOnceMessage = {
         message: {
-          messageContextInfo: {
-            deviceListMetadata: {},
-            deviceListMetadataVersion: 2,
-          },
           interactiveMessage: sourceInteractiveMessage,
         },
       };
@@ -460,6 +471,7 @@ webpack.onFullReady(() => {
     const proto: any = args[1].id ? args[2] : args[1];
     const interactiveMessage = getInteractiveMessage(proto);
     const hasNativeFlow = hasNativeFlowMessage(proto);
+    const quickReplyNativeFlow = isQuickReplyNativeFlow(proto);
     const beforeContent =
       (args[1] as any)?.content ?? (args[2] as any)?.content ?? null;
 
@@ -501,7 +513,7 @@ webpack.onFullReady(() => {
       nodeContent: debugNode?.content,
       stanzaContent: debugNode?.stanza?.content,
     });
-    if (interactiveMessage && !hasNativeFlow) {
+    if (interactiveMessage && !quickReplyNativeFlow) {
       console.log('[native-flow] fanout: before encryptAndParserMsgButtons');
       try {
         node = await encryptAndParserMsgButtons(...args, func);
@@ -514,6 +526,10 @@ webpack.onFullReady(() => {
         nodeContent: (node as any)?.content,
         stanzaContent: (node as any)?.stanza?.content,
       });
+    } else if (quickReplyNativeFlow) {
+      console.log(
+        '[native-flow] fanout: skipping encryptAndParserMsgButtons for quick_reply native flow'
+      );
     }
 
     const content: websocket.WapNode[] = getStanzaContent(node);
