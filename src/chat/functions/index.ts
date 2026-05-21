@@ -99,8 +99,10 @@ export {
 export {
   NativeFlowQuickReplyButton,
   NativeFlowQuickReplyMessageOptions,
+  sendNativeFlowMessage,
+  sendNativeFlowQuickReply,
   sendNativeFlowQuickReplyMessage,
-} from './sendNativeFlowQuickReplyMessage';
+} from './sendNativeFlowMessage';
 export { sendPixKeyMessage } from './sendPixKeyMessage';
 export { sendRawMessage } from './sendRawMessage';
 export { sendReactionToMessage } from './sendReactionToMessage';

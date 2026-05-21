@@ -97,5 +97,7 @@ export async function sendPixKeyMessage(
     },
   }) as RawMessage;
 
+  message.isFromTemplate = false;
+
   return await sendRawMessage(chatId, message, options);
 }
