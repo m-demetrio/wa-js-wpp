@@ -321,7 +321,7 @@ webpack.onFullReady(() => {
     const r = func(...args);
     const interactiveMessage = getInteractiveMessage(message);
 
-    console.debug('[native-flow] createMsgProtobuf', {
+    console.log('[native-flow] createMsgProtobuf', {
       viewOnceInteractiveMessage:
         debugMessage?.viewOnceMessage?.message?.interactiveMessage,
       interactiveMessage: debugMessage?.interactiveMessage,
@@ -463,7 +463,7 @@ webpack.onFullReady(() => {
       });
     }
 
-    console.debug('[native-flow] createFanoutMsgStanza:before', {
+    console.log('[native-flow] createFanoutMsgStanza:before', {
       viewOnceInteractiveMessage:
         proto?.viewOnceMessage?.message?.interactiveMessage,
       interactiveMessage: proto?.interactiveMessage,
@@ -477,19 +477,43 @@ webpack.onFullReady(() => {
       ),
     });
 
+    console.log('[native-flow] fanout: start');
+    console.log('[native-flow] fanout: before original func');
     let node = await func(...args);
+    const debugNode = node as any;
+    console.log('[native-flow] fanout: after original func', {
+      node,
+      nodeContent: debugNode?.content,
+      stanzaContent: debugNode?.stanza?.content,
+    });
     if (interactiveMessage) {
-      node = await encryptAndParserMsgButtons(...args, func);
+      console.log('[native-flow] fanout: before encryptAndParserMsgButtons');
+      try {
+        node = await encryptAndParserMsgButtons(...args, func);
+      } catch (error) {
+        console.error('[native-flow] encryptAndParserMsgButtons error', error);
+        throw error;
+      }
+      console.log('[native-flow] fanout: after encryptAndParserMsgButtons', {
+        node,
+        nodeContent: (node as any)?.content,
+        stanzaContent: (node as any)?.stanza?.content,
+      });
     }
 
     const content: any[] =
       (node as any).content ?? (node as any).stanza?.content ?? [];
+    console.log('[native-flow] fanout: resolved content', {
+      contentLength: content?.length,
+      tags: Array.isArray(content) ? content.map((c) => c?.tag) : null,
+      content,
+    });
 
     if (hasNativeFlow) {
       ensureQuickReplyBizNode(content as websocket.WapNode[]);
     }
 
-    console.debug('[native-flow] createFanoutMsgStanza:after', {
+    console.log('[native-flow] fanout: after ensureQuickReplyBizNode', {
       content,
       bizAdded: Boolean(content.find((c: any) => c.tag === 'biz')),
       nativeFlowAdded: Boolean(
