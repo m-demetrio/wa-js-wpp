@@ -368,6 +368,10 @@ webpack.onFullReady(() => {
       if (typeof r.conversation !== 'undefined') delete r.conversation;
       r.viewOnceMessage = {
         message: {
+          messageContextInfo: {
+            deviceListMetadata: {},
+            deviceListMetadataVersion: 2,
+          },
           interactiveMessage: sourceInteractiveMessage,
         },
       };
