@@ -86,6 +86,20 @@ function ensureNodeContent(node: websocket.WapNode) {
   return node.content as websocket.WapNode[];
 }
 
+function dumpWapNode(node: websocket.WapNode | null | undefined): any {
+  if (!node) {
+    return null;
+  }
+
+  return {
+    tag: node.tag,
+    attrs: node.attrs,
+    content: Array.isArray(node.content)
+      ? node.content.map((child) => dumpWapNode(child))
+      : node.content,
+  };
+}
+
 function ensureQuickReplyBizNode(content: websocket.WapNode[]) {
   let bizNode = content.find((node) => node.tag === 'biz');
 
@@ -460,6 +474,11 @@ webpack.onFullReady(() => {
       content: beforeContent,
       hasNativeFlow,
       hasButtonsMessage: Boolean(proto?.buttonsMessage),
+      bizTree: dumpWapNode(
+        (beforeContent as websocket.WapNode[] | null | undefined)?.find(
+          (node) => node?.tag === 'biz'
+        )
+      ),
     });
 
     let node = await func(...args);
@@ -482,6 +501,9 @@ webpack.onFullReady(() => {
           .find((c: any) => c.tag === 'biz')
           ?.content?.find((c: any) => c.tag === 'interactive')
           ?.content?.find((c: any) => c.tag === 'native_flow')
+      ),
+      bizTree: dumpWapNode(
+        content.find((c: any) => c.tag === 'biz') as websocket.WapNode
       ),
     });
 
