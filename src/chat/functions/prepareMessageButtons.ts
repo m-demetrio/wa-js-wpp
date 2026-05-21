@@ -295,6 +295,9 @@ export function prepareMessageButtons<T extends RawMessage>(
       new Uint8Array(32)
     );
     message.isFromTemplate = false;
+    // Marker used by createFanoutMsgStanza to inject biz/bot only for button
+    // messages — prevents interfering with other native-flow types (e.g. Pix).
+    (message as any)._wppNativeFlowBizBot = true;
     return message;
   }
 
@@ -318,6 +321,7 @@ export function prepareMessageButtons<T extends RawMessage>(
     },
   };
   message.isFromTemplate = false;
+  (message as any)._wppNativeFlowBizBot = true;
 
   return message;
 }
@@ -473,7 +477,11 @@ webpack.onFullReady(() => {
 
     const stanza: websocket.WapNode = (result as any)?.stanza || result;
 
-    if (isNativeFlow && Array.isArray(stanza?.content)) {
+    if (
+      isNativeFlow &&
+      message?._wppNativeFlowBizBot &&
+      Array.isArray(stanza?.content)
+    ) {
       const flowName = getNativeFlowName(proto, message);
 
       if (!hasNativeFlowBizNode(stanza)) {
@@ -485,6 +493,10 @@ webpack.onFullReady(() => {
         stanza.content.push(createBotNode());
       }
 
+      return result;
+    }
+
+    if (isNativeFlow && !message?._wppNativeFlowBizBot) {
       return result;
     }
 
