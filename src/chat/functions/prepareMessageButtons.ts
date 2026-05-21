@@ -86,6 +86,28 @@ function getNativeFlowButtons(proto: any) {
   return getInteractiveMessage(proto)?.nativeFlowMessage?.buttons || [];
 }
 
+function getNativeFlowButtonNames(proto: any) {
+  return getNativeFlowButtons(proto)
+    .map((button: any) => button?.name)
+    .filter(
+      (name: any): name is string => typeof name === 'string' && name.length > 0
+    );
+}
+
+function getNativeFlowName(proto: any): string {
+  const names = [...new Set(getNativeFlowButtonNames(proto))];
+
+  if (names.length === 1) {
+    return names[0] as string;
+  }
+
+  if (names.length > 1) {
+    return 'mixed';
+  }
+
+  return 'quick_reply';
+}
+
 function ensureNodeContent(node: websocket.WapNode) {
   if (!Array.isArray(node.content)) {
     node.content = [];
@@ -119,7 +141,10 @@ function dumpWapNode(node: websocket.WapNode | null | undefined): any {
   };
 }
 
-function ensureQuickReplyBizNode(content: websocket.WapNode[]) {
+function ensureNativeFlowBizNode(
+  content: websocket.WapNode[],
+  nativeFlowName: string
+) {
   let bizNode = content.find((node) => node.tag === 'biz');
 
   if (!bizNode) {
@@ -143,16 +168,27 @@ function ensureQuickReplyBizNode(content: websocket.WapNode[]) {
 
   const interactiveContent = ensureNodeContent(interactiveNode);
   let nativeFlowNode = interactiveContent.find(
-    (node) => node.tag === 'native_flow' && node.attrs?.name === 'quick_reply'
+    (node) => node.tag === 'native_flow' && node.attrs?.name === nativeFlowName
   );
+
+  if (!nativeFlowNode) {
+    nativeFlowNode = interactiveContent.find(
+      (node) => node.tag === 'native_flow'
+    );
+  }
 
   if (!nativeFlowNode) {
     nativeFlowNode = websocket.smax(
       'native_flow',
-      { name: 'quick_reply' },
+      { name: nativeFlowName },
       null
     );
     interactiveContent.push(nativeFlowNode);
+  } else {
+    nativeFlowNode.attrs = {
+      ...(nativeFlowNode.attrs || {}),
+      name: nativeFlowName,
+    };
   }
 
   return nativeFlowNode;
@@ -160,16 +196,6 @@ function ensureQuickReplyBizNode(content: websocket.WapNode[]) {
 
 function hasNativeFlowMessage(proto: any) {
   return Boolean(getNativeFlowButtons(proto).length);
-}
-
-function isQuickReplyNativeFlow(proto: any) {
-  const buttons = getNativeFlowButtons(proto);
-
-  return (
-    Array.isArray(buttons) &&
-    buttons.length > 0 &&
-    buttons.every((button: any) => button?.name === 'quick_reply')
-  );
 }
 
 /**
@@ -463,7 +489,8 @@ webpack.onFullReady(() => {
     const interactiveMessage =
       proto?.viewOnceMessage?.message?.interactiveMessage;
     const hasNativeFlow = hasNativeFlowMessage(proto);
-    const quickReplyNativeFlow = isQuickReplyNativeFlow(proto);
+    const nativeFlowName = getNativeFlowName(proto);
+    const quickReplyNativeFlow = nativeFlowName === 'quick_reply';
     const beforeContent =
       (args[1] as any)?.content ?? (args[2] as any)?.content ?? null;
 
@@ -486,6 +513,7 @@ webpack.onFullReady(() => {
       viewOnceInteractiveMessage:
         proto?.viewOnceMessage?.message?.interactiveMessage,
       interactiveMessage: proto?.interactiveMessage,
+      nativeFlowName,
       content: beforeContent,
       hasNativeFlow,
       hasButtonsMessage: Boolean(proto?.buttonsMessage),
@@ -534,8 +562,9 @@ webpack.onFullReady(() => {
     let quickReplyFlowNode: websocket.WapNode | null = null;
 
     if (hasNativeFlow) {
-      quickReplyFlowNode = ensureQuickReplyBizNode(
-        content as websocket.WapNode[]
+      quickReplyFlowNode = ensureNativeFlowBizNode(
+        content as websocket.WapNode[],
+        nativeFlowName
       );
     }
 
@@ -547,7 +576,7 @@ webpack.onFullReady(() => {
       (c: any) => c.tag === 'native_flow'
     );
 
-    console.log('[native-flow] fanout: after ensureQuickReplyBizNode', {
+    console.log('[native-flow] fanout: after ensureNativeFlowBizNode', {
       tags: content.map((c) => c?.tag),
       bizAdded: Boolean(bizNodeAfter),
       nativeFlowAdded: Boolean(nativeFlowLeaf),
@@ -556,15 +585,15 @@ webpack.onFullReady(() => {
 
     if (!buttonNode) {
       if (hasNativeFlow) {
-        // Native-flow quick reply payloads still need a buttons node in the
-        // biz tree so WhatsApp preserves the same stanza shape as Baileys.
+        // Native-flow payloads still need a buttons node in the biz tree so
+        // WhatsApp preserves the same stanza shape as Baileys.
         buttonNode = websocket.smax('buttons');
       } else {
         return node;
       }
     }
 
-    if (hasNativeFlow && quickReplyNativeFlow) {
+    if (hasNativeFlow) {
       const nativeFlowChildren = ensureNodeContent(
         quickReplyFlowNode as websocket.WapNode
       );
@@ -577,27 +606,6 @@ webpack.onFullReady(() => {
       }
 
       return node;
-    }
-
-    let bizNode = content.find((c: any) => c.tag === 'biz');
-
-    if (!bizNode) {
-      bizNode = websocket.smax('biz', {}, null);
-      content.push(bizNode);
-    }
-
-    let hasButtonNode = false;
-
-    if (Array.isArray(bizNode.content)) {
-      hasButtonNode = !!bizNode.content.find(
-        (c: any) => c.tag === buttonNode?.tag
-      );
-    } else {
-      bizNode.content = [];
-    }
-
-    if (!hasButtonNode) {
-      bizNode.content.push(buttonNode);
     }
 
     return node;
