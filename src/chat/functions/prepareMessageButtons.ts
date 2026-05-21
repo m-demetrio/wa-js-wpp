@@ -274,15 +274,21 @@ export function prepareMessageButtons<T extends RawMessage>(
   const flowName = primaryFlowName(nativeFlowButtons);
 
   if (message.type === 'chat') {
-    // Extract text before clearing the original body field.
-    // WA's createMsgProtobuf would also produce a conversation/extendedTextMessage
-    // from `body`, creating a conflicting proto alongside the interactiveMessage
-    // and causing ERROR_UNKNOWN from the server.
-    const text = (message as any).body || message.caption || ' ';
+    // Save body text to inject later via createMsgProtobuf wrapper.
+    // caption must be '' (empty) — a non-empty caption causes WA's
+    // createMsgProtobuf to emit a conversation/extendedTextMessage field
+    // alongside viewOnceMessage.interactiveMessage → proto conflict →
+    // ERROR_UNKNOWN. Pix uses caption:'' and works; we mirror that pattern.
+    const text = (message as any).body || message.caption || '';
     delete (message as any).body;
+    // Remove sendTextMessage-specific fields that don't exist on Pix rawMessage
+    // and may cause WA to take a different serialisation path.
+    delete (message as any).subtype;
+    delete (message as any).urlText;
+    delete (message as any).urlNumber;
 
     message.type = 'interactive' as any;
-    message.caption = text;
+    message.caption = '';
     message.title = options.title;
     message.footer = options.footer;
     (message as any).nativeFlowName = flowName;
@@ -295,6 +301,10 @@ export function prepareMessageButtons<T extends RawMessage>(
       new Uint8Array(32)
     );
     message.isFromTemplate = false;
+    // Carry body/title/footer for later injection in createMsgProtobuf wrapper.
+    (message as any)._wppBodyText = text;
+    (message as any)._wppTitleText = options.title || '';
+    (message as any)._wppFooterText = options.footer || '';
     // Marker used by createFanoutMsgStanza to inject biz/bot only for button
     // messages — prevents interfering with other native-flow types (e.g. Pix).
     (message as any)._wppNativeFlowBizBot = true;
@@ -370,20 +380,31 @@ webpack.onFullReady(() => {
         },
       };
     } else if ((message as any)?._wppNativeFlowBizBot) {
-      // Text path: WA may create a conversation/extendedTextMessage from
-      // caption alongside the viewOnceMessage.interactiveMessage — remove it.
+      // Text path: caption is '' so WA should NOT create conversation/
+      // extendedTextMessage, but clean up defensively just in case.
       if (typeof r.conversation !== 'undefined') delete r.conversation;
       if (typeof r.extendedTextMessage !== 'undefined')
         delete r.extendedTextMessage;
 
-      // Move caption into interactiveMessage.body.text so the recipient sees
-      // the message body text above the buttons.
-      const caption = (message as any).caption || '';
+      // Inject body/title/footer stored before caption was cleared.
+      const bodyText = (message as any)._wppBodyText || '';
+      const titleText = (message as any)._wppTitleText || '';
+      const footerText = (message as any)._wppFooterText || '';
       const interactive =
         r.viewOnceMessage?.message?.interactiveMessage || r.interactiveMessage;
-      if (interactive && caption) {
-        if (!interactive.body) interactive.body = {};
-        interactive.body.text = caption;
+      if (interactive) {
+        if (bodyText) {
+          if (!interactive.body) interactive.body = {};
+          interactive.body.text = bodyText;
+        }
+        if (titleText) {
+          if (!interactive.header) interactive.header = {};
+          interactive.header.title = titleText;
+        }
+        if (footerText) {
+          if (!interactive.footer) interactive.footer = {};
+          interactive.footer.text = footerText;
+        }
       }
     }
 
