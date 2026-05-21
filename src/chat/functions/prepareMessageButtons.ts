@@ -369,6 +369,22 @@ webpack.onFullReady(() => {
           interactiveMessage: message.interactiveMessage,
         },
       };
+    } else if ((message as any)?._wppNativeFlowBizBot) {
+      // Text path: WA may create a conversation/extendedTextMessage from
+      // caption alongside the viewOnceMessage.interactiveMessage — remove it.
+      if (typeof r.conversation !== 'undefined') delete r.conversation;
+      if (typeof r.extendedTextMessage !== 'undefined')
+        delete r.extendedTextMessage;
+
+      // Move caption into interactiveMessage.body.text so the recipient sees
+      // the message body text above the buttons.
+      const caption = (message as any).caption || '';
+      const interactive =
+        r.viewOnceMessage?.message?.interactiveMessage || r.interactiveMessage;
+      if (interactive && caption) {
+        if (!interactive.body) interactive.body = {};
+        interactive.body.text = caption;
+      }
     }
 
     return r;
