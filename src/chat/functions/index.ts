@@ -96,6 +96,11 @@ export {
   LocationMessageOptions,
   sendLocationMessage,
 } from './sendLocationMessage';
+export {
+  NativeFlowQuickReplyButton,
+  NativeFlowQuickReplyMessageOptions,
+  sendNativeFlowQuickReplyMessage,
+} from './sendNativeFlowQuickReplyMessage';
 export { sendPixKeyMessage } from './sendPixKeyMessage';
 export { sendRawMessage } from './sendRawMessage';
 export { sendReactionToMessage } from './sendReactionToMessage';

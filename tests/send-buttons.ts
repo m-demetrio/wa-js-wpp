@@ -24,19 +24,23 @@ test.skip(
 );
 
 test.describe('message send integration tests', () => {
-  test('sendTextMessage sends quick reply buttons and returns OK', async ({
+  test('sendNativeFlowQuickReplyMessage sends quick reply buttons and returns OK', async ({
     loggedPage,
   }) => {
     const result = await loggedPage.evaluate(async (chatId) => {
-      const sent = await WPP.chat.sendTextMessage(chatId, 'Escolha uma opcao', {
-        waitForAck: true,
-        title: 'Teste quick reply',
-        footer: 'By ZapOrganic',
-        buttons: [
-          { id: 'op1', text: 'Opcao 1' },
-          { id: 'op2', text: 'Opcao 2' },
-        ],
-      });
+      const sent = await WPP.chat.sendNativeFlowQuickReplyMessage(
+        chatId,
+        'Escolha uma opcao',
+        {
+          waitForAck: true,
+          title: 'Teste quick reply',
+          footer: 'By ZapOrganic',
+          buttons: [
+            { id: 'op1', text: 'Opcao 1' },
+            { id: 'op2', text: 'Opcao 2' },
+          ],
+        }
+      );
 
       const sendResult = await sent.sendMsgResult;
       const msg = await WPP.chat.getMessageById(sent.id);
@@ -49,11 +53,16 @@ test.describe('message send integration tests', () => {
           id: msg.id.toString(),
           body: msg.body,
           ack: msg.ack,
-          hydratedButtons: msg.hydratedButtons?.map((button) => ({
-            index: button.index ?? null,
-            id: button.quickReplyButton?.id ?? null,
-            text: button.quickReplyButton?.displayText ?? null,
-          })),
+          type: msg.type,
+          interactiveType: msg.interactiveType ?? null,
+          nativeFlowName: msg.nativeFlowName ?? null,
+          hasHydratedButtons: Boolean(msg.hydratedButtons?.length),
+          hasTemplateButtons: Boolean(msg.buttons?.length),
+          buttonNames: (
+            msg.interactiveMessage?.nativeFlowMessage?.buttons ??
+            msg.interactivePayload?.buttons ??
+            []
+          ).map((button) => button.name),
         },
       };
     }, targetChatId);
@@ -63,19 +72,26 @@ test.describe('message send integration tests', () => {
     expect(result.sendResult.messageSendResult).toBe('OK');
     expect(result.message.id).toBe(result.id);
     expect(result.message.body).toBe('Escolha uma opcao');
-    expect(result.message.hydratedButtons).toHaveLength(2);
-    expect(result.message.hydratedButtons?.[0]?.id).toBe('op1');
-    expect(result.message.hydratedButtons?.[1]?.text).toBe('Opcao 2');
+    expect(result.message.type).toBe('interactive');
+    expect(result.message.interactiveType).toBe('native_flow');
+    expect(result.message.nativeFlowName).toBe('quick_reply');
+    expect(result.message.hasHydratedButtons).toBe(false);
+    expect(result.message.hasTemplateButtons).toBe(false);
+    expect(result.message.buttonNames).toEqual(['quick_reply', 'quick_reply']);
   });
 
-  test('sendTextMessage sends a single quick reply button', async ({
+  test('sendNativeFlowQuickReplyMessage sends a single quick reply button', async ({
     loggedPage,
   }) => {
     const result = await loggedPage.evaluate(async (chatId) => {
-      const sent = await WPP.chat.sendTextMessage(chatId, 'Teste de um botao', {
-        waitForAck: true,
-        buttons: [{ id: 'only', text: 'Somente um' }],
-      });
+      const sent = await WPP.chat.sendNativeFlowQuickReplyMessage(
+        chatId,
+        'Teste de um botao',
+        {
+          waitForAck: true,
+          buttons: [{ id: 'only', text: 'Somente um' }],
+        }
+      );
 
       const sendResult = await sent.sendMsgResult;
       const msg = await WPP.chat.getMessageById(sent.id);
@@ -83,18 +99,25 @@ test.describe('message send integration tests', () => {
       return {
         id: sent.id,
         sendResult,
-        hydratedButtons: msg.hydratedButtons?.map((button) => ({
-          id: button.quickReplyButton?.id ?? null,
-          text: button.quickReplyButton?.displayText ?? null,
-        })),
+        type: msg.type,
+        interactiveType: msg.interactiveType ?? null,
+        nativeFlowName: msg.nativeFlowName ?? null,
+        hasHydratedButtons: Boolean(msg.hydratedButtons?.length),
+        buttonNames: (
+          msg.interactiveMessage?.nativeFlowMessage?.buttons ??
+          msg.interactivePayload?.buttons ??
+          []
+        ).map((button) => button.name),
       };
     }, targetChatId);
 
     expect(result.id).toBeTruthy();
     expect(result.sendResult.messageSendResult).toBe('OK');
-    expect(result.hydratedButtons).toHaveLength(1);
-    expect(result.hydratedButtons?.[0]?.id).toBe('only');
-    expect(result.hydratedButtons?.[0]?.text).toBe('Somente um');
+    expect(result.type).toBe('interactive');
+    expect(result.interactiveType).toBe('native_flow');
+    expect(result.nativeFlowName).toBe('quick_reply');
+    expect(result.hasHydratedButtons).toBe(false);
+    expect(result.buttonNames).toEqual(['quick_reply']);
   });
 
   test('sendTextMessage rejects mixed quick reply and CTA buttons', async ({

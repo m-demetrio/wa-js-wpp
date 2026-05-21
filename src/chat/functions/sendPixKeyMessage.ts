@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { generateOrderUniqueId, WPPError } from '../../util';
+import { WPPError } from '../../util';
 import {
   defaultSendMessageOptions,
   RawMessage,
@@ -22,6 +22,10 @@ import {
   SendMessageReturn,
 } from '..';
 import { sendRawMessage } from '.';
+import {
+  createInteractiveMessageEnvelope,
+  createPixPaymentInfoPayload,
+} from './interactiveMessage';
 
 export interface OrderItems {
   type: 'product' | 'custom';
@@ -76,60 +80,9 @@ export async function sendPixKeyMessage(
     ...options,
   };
 
-  const buttonParamsJson = {
-    order: {
-      items: [
-        {
-          name: '',
-          retailer_id: `custom-item-${generateOrderUniqueId()}`,
-          amount: {
-            offset: 1,
-            value: 0,
-          },
-          quantity: 0,
-        },
-      ],
-      order_type: 'ORDER_WITHOUT_AMOUNT',
-      status: 'payment_requested',
-      subtotal: {
-        value: 0,
-        offset: 1,
-      },
-    },
-    total_amount: {
-      value: 0,
-      offset: 1,
-    },
-    reference_id: generateOrderUniqueId(),
-    payment_settings: [
-      {
-        type: 'pix_static_code',
-        pix_static_code: {
-          key_type: params.keyType,
-          merchant_name: params.name,
-          key: params.key,
-        },
-      },
-      {
-        type: 'cards',
-        cards: {
-          enabled: false,
-        },
-      },
-    ],
-    external_payment_configurations: [
-      {
-        payment_instruction: params.instructions || '',
-        type: 'payment_instruction',
-      },
-    ],
-    additional_note: '',
-    currency: 'BRL',
-    type: 'physical-goods',
-  };
+  const buttonParamsJson = createPixPaymentInfoPayload(params);
 
-  const message: RawMessage = {
-    type: 'interactive',
+  const message = createInteractiveMessageEnvelope({
     caption: '',
     nativeFlowName: 'payment_info',
     interactiveType: 'native_flow',
@@ -142,7 +95,7 @@ export async function sendPixKeyMessage(
       ],
       messageVersion: 1,
     },
-    messageSecret: self.crypto.getRandomValues(new Uint8Array(32)),
-  };
+  }) as RawMessage;
+
   return await sendRawMessage(chatId, message, options);
 }

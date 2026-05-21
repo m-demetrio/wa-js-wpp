@@ -33,6 +33,10 @@ import {
 } from '../../whatsapp/functions';
 import { RawMessage } from '..';
 import { encryptAndParserMsgButtons } from './buttonsParser';
+import {
+  createInteractiveMessageEnvelope,
+  createQuickReplyInteractiveMessage,
+} from './interactiveMessage';
 
 export type MessageButtonsTypes =
   | {
@@ -76,6 +80,10 @@ function getInteractiveMessage(proto: any) {
     proto?.templateMessage?.message?.interactiveMessage ||
     proto?.interactiveMessage
   );
+}
+
+function getNativeFlowButtons(proto: any) {
+  return getInteractiveMessage(proto)?.nativeFlowMessage?.buttons || [];
 }
 
 function ensureNodeContent(node: websocket.WapNode) {
@@ -146,16 +154,16 @@ function ensureQuickReplyBizNode(content: websocket.WapNode[]) {
     );
     interactiveContent.push(nativeFlowNode);
   }
+
+  return nativeFlowNode;
 }
 
 function hasNativeFlowMessage(proto: any) {
-  return Boolean(
-    getInteractiveMessage(proto)?.nativeFlowMessage?.buttons?.length
-  );
+  return Boolean(getNativeFlowButtons(proto).length);
 }
 
 function isQuickReplyNativeFlow(proto: any) {
-  const buttons = getInteractiveMessage(proto)?.nativeFlowMessage?.buttons;
+  const buttons = getNativeFlowButtons(proto);
 
   return (
     Array.isArray(buttons) &&
@@ -204,61 +212,44 @@ export function prepareMessageButtons<T extends RawMessage>(
   message.title = options.title;
   message.footer = options.footer;
 
-  message.interactiveMessage = {
-    header: {
-      title: options.title || ' ',
-      hasMediaAttachment: false,
-    },
-    body: {
-      text: message.body || message.caption || ' ',
-    },
-    footer: {
-      text: options.footer || ' ',
-    },
-    nativeFlowMessage: {
-      messageVersion: 1,
-      buttons: options.buttons.map((button) => {
-        if ('phoneNumber' in button) {
-          return {
-            name: 'cta_call',
-            buttonParamsJson: JSON.stringify({
-              display_text: button.text,
-              phone_number: button.phoneNumber,
-            }),
-          };
-        }
-        if ('url' in button) {
-          return {
-            name: 'cta_url',
-            buttonParamsJson: JSON.stringify({
-              display_text: button.text,
-              url: button.url,
-              merchant_url: button.url,
-            }),
-          };
-        }
-        if ('code' in button) {
-          return {
-            name: 'cta_copy',
-            buttonParamsJson: JSON.stringify({
-              display_text: button.text,
-              copy_code: button.code,
-            }),
-          };
-        }
-        if ('raw' in button) {
-          return button.raw;
-        }
-        return {
-          name: 'quick_reply',
-          buttonParamsJson: JSON.stringify({
-            display_text: button.text,
-            id: button.id,
-          }),
-        };
+  const isQuickReplyOnly = options.buttons.every(
+    (button) =>
+      !('phoneNumber' in button) && !('url' in button) && !('code' in button)
+  );
+
+  if (isQuickReplyOnly) {
+    const quickReplyButtons = options.buttons as Array<{
+      id?: string;
+      text: string;
+    }>;
+    const nativeFlowButtons: Array<{
+      name: string;
+      buttonParamsJson: string;
+    }> = quickReplyButtons.map((button, index) => ({
+      name: 'quick_reply',
+      buttonParamsJson: JSON.stringify({
+        display_text: button.text,
+        id: button.id || `${index}`,
       }),
-    },
-  };
+    }));
+
+    Object.assign(
+      message,
+      createInteractiveMessageEnvelope({
+        caption: message.body || message.caption || ' ',
+        footer: options.footer,
+        title: options.title,
+        includeType: false,
+        messageSecret: false,
+      })
+    );
+    message.interactiveMessage = createQuickReplyInteractiveMessage({
+      title: options.title,
+      body: message.body || message.caption || ' ',
+      footer: options.footer,
+      buttons: nativeFlowButtons,
+    });
+  }
 
   // Keep local button rendering enabled while testing native flow payloads.
   message.isFromTemplate = true;
@@ -469,7 +460,8 @@ webpack.onFullReady(() => {
   wrapModuleFunction(createFanoutMsgStanza, async (func, ...args) => {
     let buttonNode: websocket.WapNode | null = null;
     const proto: any = args[1].id ? args[2] : args[1];
-    const interactiveMessage = getInteractiveMessage(proto);
+    const interactiveMessage =
+      proto?.viewOnceMessage?.message?.interactiveMessage;
     const hasNativeFlow = hasNativeFlowMessage(proto);
     const quickReplyNativeFlow = isQuickReplyNativeFlow(proto);
     const beforeContent =
@@ -539,26 +531,51 @@ webpack.onFullReady(() => {
       content,
     });
 
+    let quickReplyFlowNode: websocket.WapNode | null = null;
+
     if (hasNativeFlow) {
-      ensureQuickReplyBizNode(content as websocket.WapNode[]);
+      quickReplyFlowNode = ensureQuickReplyBizNode(
+        content as websocket.WapNode[]
+      );
     }
 
     const bizNodeAfter = content.find((c: any) => c.tag === 'biz');
     const interactiveNode = getStanzaContent(bizNodeAfter).find(
       (c: any) => c.tag === 'interactive'
     );
-    const nativeFlowNode = getStanzaContent(interactiveNode).find(
+    const nativeFlowLeaf = getStanzaContent(interactiveNode).find(
       (c: any) => c.tag === 'native_flow'
     );
 
     console.log('[native-flow] fanout: after ensureQuickReplyBizNode', {
       tags: content.map((c) => c?.tag),
       bizAdded: Boolean(bizNodeAfter),
-      nativeFlowAdded: Boolean(nativeFlowNode),
+      nativeFlowAdded: Boolean(nativeFlowLeaf),
       bizTree: dumpWapNode(bizNodeAfter as websocket.WapNode),
     });
 
     if (!buttonNode) {
+      if (hasNativeFlow) {
+        // Native-flow quick reply payloads still need a buttons node in the
+        // biz tree so WhatsApp preserves the same stanza shape as Baileys.
+        buttonNode = websocket.smax('buttons');
+      } else {
+        return node;
+      }
+    }
+
+    if (hasNativeFlow && quickReplyNativeFlow) {
+      const nativeFlowChildren = ensureNodeContent(
+        quickReplyFlowNode as websocket.WapNode
+      );
+      const buttonExists = nativeFlowChildren.some(
+        (c: any) => c.tag === buttonNode?.tag
+      );
+
+      if (!buttonExists) {
+        nativeFlowChildren.push(buttonNode);
+      }
+
       return node;
     }
 
