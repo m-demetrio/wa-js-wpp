@@ -44,6 +44,16 @@ function getProtoFromArgs(args: any[]) {
   return args[2];
 }
 
+function getChatWid(message: any, stanza?: websocket.WapNode) {
+  return (
+    message?.id?.remote ||
+    message?.to ||
+    message?.from ||
+    stanza?.attrs?.to ||
+    stanza?.attrs?.from
+  );
+}
+
 function hasNativeFlow(proto: any, message: any) {
   const nativeFlowMessage = getNativeFlowMessage(proto);
 
@@ -79,6 +89,24 @@ function getNativeFlowName(proto: any, message: any) {
   );
 }
 
+function isPrivateChat(message: any, stanza?: websocket.WapNode) {
+  const wid = getChatWid(message, stanza);
+
+  if (!wid) {
+    return false;
+  }
+
+  if (typeof wid.isUser === 'function') {
+    return wid.isUser();
+  }
+
+  if (typeof wid === 'string') {
+    return /@(c\.us|lid|bot|hosted|hosted\.lid)$/.test(wid);
+  }
+
+  return false;
+}
+
 function getContentTags(stanza: websocket.WapNode) {
   return Array.isArray(stanza.content)
     ? stanza.content.map((node: websocket.WapNode) => node?.tag)
@@ -101,6 +129,14 @@ function hasNativeFlowBizNode(stanza: websocket.WapNode) {
       node?.tag === 'biz' && interactiveNode?.attrs?.type === 'native_flow'
     );
   });
+}
+
+function hasBotNode(stanza: websocket.WapNode) {
+  if (!Array.isArray(stanza.content)) {
+    return false;
+  }
+
+  return stanza.content.some((node: websocket.WapNode) => node?.tag === 'bot');
 }
 
 function createNativeFlowBizNode(nativeFlowName: string): websocket.WapNode {
@@ -128,6 +164,16 @@ function createNativeFlowBizNode(nativeFlowName: string): websocket.WapNode {
   } as unknown as websocket.WapNode;
 }
 
+function createBotNode(): websocket.WapNode {
+  return {
+    tag: 'bot',
+    attrs: {
+      biz_bot: '1',
+    },
+    content: undefined,
+  } as unknown as websocket.WapNode;
+}
+
 webpack.onFullReady(() => {
   wrapModuleFunction(createFanoutMsgStanza, async (func, ...args) => {
     const message = getMessageFromArgs(args);
@@ -146,17 +192,25 @@ webpack.onFullReady(() => {
     const stanza = (result as any)?.stanza || result;
     const tagsBefore = getContentTags(stanza);
     const bizTree = createNativeFlowBizNode(nativeFlowName);
+    const privateChat = isPrivateChat(message, stanza);
+    let botNodeAdded = false;
 
     if (Array.isArray(stanza?.content) && !hasNativeFlowBizNode(stanza)) {
       stanza.content.push(bizTree);
     }
 
+    if (privateChat && Array.isArray(stanza?.content) && !hasBotNode(stanza)) {
+      stanza.content.push(createBotNode());
+      botNodeAdded = true;
+    }
+
     console.log('[native-flow] createFanoutMsgStanza patch', {
       nativeFlowName,
+      isPrivateChat: privateChat,
       tagsBefore,
       tagsAfter: getContentTags(stanza),
       bizTree,
-      sendResult: result,
+      botNodeAdded,
     });
 
     return result;
