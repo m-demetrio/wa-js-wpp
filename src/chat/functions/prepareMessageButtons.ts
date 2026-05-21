@@ -67,6 +67,75 @@ export interface MessageButtonsOptions {
   footer?: string;
 }
 
+function getInteractiveMessage(proto: any) {
+  return (
+    proto?.viewOnceMessage?.message?.interactiveMessage ||
+    proto?.viewOnceMessageV2?.message?.interactiveMessage ||
+    proto?.viewOnceMessageV2Extension?.message?.interactiveMessage ||
+    proto?.interactiveMessage
+  );
+}
+
+function getNativeFlowName(buttons: any[]): string {
+  const names = buttons.map((button) => button?.name).filter(Boolean);
+  const uniqueNames = Array.from(new Set(names));
+
+  if (uniqueNames.length === 1) {
+    return uniqueNames[0];
+  }
+
+  return 'mixed';
+}
+
+function ensureNodeContent(node: websocket.WapNode) {
+  if (!Array.isArray(node.content)) {
+    node.content = [];
+  }
+
+  return node.content as websocket.WapNode[];
+}
+
+function ensureNativeFlowBizNode(
+  content: websocket.WapNode[],
+  nativeFlowMessage: any
+) {
+  let bizNode = content.find((node) => node.tag === 'biz');
+
+  if (!bizNode) {
+    bizNode = websocket.smax('biz', {}, null);
+    content.push(bizNode);
+  }
+
+  const bizContent = ensureNodeContent(bizNode);
+  let interactiveNode = bizContent.find(
+    (node) => node.tag === 'interactive' && node.attrs?.type === 'native_flow'
+  );
+
+  if (!interactiveNode) {
+    interactiveNode = websocket.smax(
+      'interactive',
+      { type: 'native_flow', v: '1' },
+      null
+    );
+    bizContent.push(interactiveNode);
+  }
+
+  const interactiveContent = ensureNodeContent(interactiveNode);
+  const nativeFlowName = getNativeFlowName(nativeFlowMessage.buttons || []);
+  let nativeFlowNode = interactiveContent.find(
+    (node) => node.tag === 'native_flow' && node.attrs?.name === nativeFlowName
+  );
+
+  if (!nativeFlowNode) {
+    nativeFlowNode = websocket.smax(
+      'native_flow',
+      { v: '9', name: nativeFlowName },
+      null
+    );
+    interactiveContent.push(nativeFlowNode);
+  }
+}
+
 /**
  * Prepare a message for buttons
  *
@@ -241,7 +310,11 @@ webpack.onFullReady(() => {
   wrapModuleFunction(createMsgProtobuf, (func, ...args) => {
     const [message] = args;
     const r = func(...args);
-    if (message.interactiveMessage?.nativeFlowMessage?.buttons !== undefined) {
+    const interactiveMessage = getInteractiveMessage(message);
+
+    if (interactiveMessage?.nativeFlowMessage?.buttons !== undefined) {
+      const sourceInteractiveMessage =
+        message.interactiveMessage || interactiveMessage;
       const mediaPart = [
         'documentMessage',
         'documentWithCaptionMessage',
@@ -268,7 +341,7 @@ webpack.onFullReady(() => {
       if (typeof r.conversation !== 'undefined') delete r.conversation;
       r.viewOnceMessage = {
         message: {
-          interactiveMessage: message.interactiveMessage,
+          interactiveMessage: sourceInteractiveMessage,
         },
       };
     }
@@ -352,6 +425,8 @@ webpack.onFullReady(() => {
   wrapModuleFunction(createFanoutMsgStanza, async (func, ...args) => {
     let buttonNode: websocket.WapNode | null = null;
     const proto: any = args[1].id ? args[2] : args[1];
+    const interactiveMessage = getInteractiveMessage(proto);
+    const nativeFlowMessage = interactiveMessage?.nativeFlowMessage;
 
     if (proto.buttonsMessage) {
       buttonNode = websocket.smax('buttons');
@@ -369,16 +444,26 @@ webpack.onFullReady(() => {
     }
 
     let node = await func(...args);
-    if (proto?.viewOnceMessage?.message?.interactiveMessage) {
+    if (interactiveMessage) {
       node = await encryptAndParserMsgButtons(...args, func);
+    }
+
+    if (!buttonNode) {
+      if (!nativeFlowMessage) {
+        return node;
+      }
+    }
+
+    const content =
+      (node.content as websocket.WapNode[]) || (node as any).stanza.content;
+
+    if (nativeFlowMessage) {
+      ensureNativeFlowBizNode(content, nativeFlowMessage);
     }
 
     if (!buttonNode) {
       return node;
     }
-
-    const content =
-      (node.content as websocket.WapNode[]) || (node as any).stanza.content;
 
     let bizNode = content.find((c) => c.tag === 'biz');
 
