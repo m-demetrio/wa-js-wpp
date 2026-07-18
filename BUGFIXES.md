@@ -25,6 +25,26 @@ These fixes stabilize sending flows for new contacts or contacts migrated to LID
   version check and the dead positional branch entirely. Also hardened `alternateWid?.server`
   (was an unguarded property access that could throw for LID-only contacts with no cached
   phone-number mapping).
+- **`injectLoader()` locked `loaderType = 'webpack'` prematurely, causing permanent injection
+  timeout**: `webpack/index.ts` set `loaderType = 'webpack'` just because
+  `window.webpackChunkwhatsapp_web_client` already had items when `injectLoader()` ran — before
+  any real `webpackRequire` was captured (that only happens inside the chunk-push callback). Since
+  that array almost always already has items by the time injection runs, this branch fired
+  immediately on every load. Two consequences: (1) the `metaTimer` fallback (which detects
+  `window.require`/`window.__d` — the Meta/Haste module system some WhatsApp Web builds use
+  instead of classic webpack — and would have worked) only runs while `loaderType === 'unknown'`,
+  so it died before ever getting a chance; (2) the webpack path itself never truly completed
+  either, since `loaderType` was already "set" independent of whether the chunk-push callback ever
+  fired. Net effect: `webpackRequire` stayed `undefined` forever, `isReady`/`isFullReady` never
+  flipped `true`, and any consumer waiting on `onFullReady`/an injection-ready promise timed out
+  permanently — worse with slower-loading sessions (e.g., large unread/history backlogs push the
+  moment webpack chunks populate earlier relative to when the real handshake completes). Fixed by
+  removing the premature assignment — `loaderType` is now only set inside the real chunk-push
+  callback (webpack path) or by `metaTimer` (Meta/Haste path). Also fixed a related latent bug:
+  the chunk array was never actually reattached to `global[webpackChunkwhatsapp_web_client]` when
+  it didn't already exist (the prior code called `Object.defineProperty` with the array itself as
+  the descriptor, which does not assign the property) — `global[chunkName] = chunk` now runs
+  unconditionally so the later `chunk.push(...)` reaches the real webpack runtime once it loads.
 
 ## Usage notes
 

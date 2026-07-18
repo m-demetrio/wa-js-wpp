@@ -167,11 +167,23 @@ export function injectLoader(): void {
   const chunkName = 'webpackChunkwhatsapp_web_client';
 
   const chunk = global[chunkName] || [];
-  if (!chunk || chunk?.length === 0) {
-    Object.defineProperty(global, chunkName, chunk);
-  } else {
-    loaderType = 'webpack';
-  }
+  // Garante que `chunk` fica acessível em `global[chunkName]` mesmo quando ainda não existia —
+  // o webpack real, ao carregar depois, encontra o array já populado e "substitui" seu `.push`,
+  // reprocessando as entradas existentes (inclusive a que empurramos abaixo via `chunk.push`).
+  // Sem essa atribuição, `chunk.push(...)` mais abaixo só afeta o array local, nunca chega no
+  // runtime real do webpack quando `webpackChunk*` não existia ainda nesse momento.
+  global[chunkName] = chunk;
+
+  // BUGFIX (ver docs/WA-JS-INJECTION.md §4 no projeto ZapOrganic Pro): esse bloco setava
+  // `loaderType = 'webpack'` só por `chunk.length > 0` — antes de qualquer captura REAL de
+  // `webpackRequire` (isso só acontece dentro de `injectFunction`, via `chunk.push` mais abaixo).
+  // `window.webpackChunkwhatsapp_web_client` quase sempre já tem itens quando `injectLoader()`
+  // roda, então esse branch travava `loaderType` na hora — e como `metaTimer` (o fallback 'meta',
+  // que FUNCIONARIA em builds que usam `__d`/`require` do Meta/Haste em vez de webpack clássico)
+  // só age enquanto `loaderType === 'unknown'`, ele morria prematuramente. Resultado:
+  // `webpackRequire` nunca é capturado de verdade, `isReady`/`isFullReady` nunca viram `true`,
+  // `ensureWaJsReady()` sempre dá timeout. `loaderType` agora só é setado dentro do callback real
+  // (`injectFunction`, quando o webpack de fato chama nosso factory) ou pelo `metaTimer`.
 
   const injectFunction = async (__webpack_require__: any) => {
     loaderType = 'webpack';

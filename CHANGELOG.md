@@ -1,3 +1,16 @@
+## 4.2.3-zop (2026-07-18)
+
+### Bug Fixes
+
+* `injectLoader()` no longer locks `loaderType` to `'webpack'` just because
+  `webpackChunkwhatsapp_web_client` already had items — that happened before any real
+  `webpackRequire` was captured and permanently killed the `metaTimer` fallback, causing injection
+  to time out forever on builds that need the Meta/Haste (`__d`/`require`) path.
+* `global[webpackChunkwhatsapp_web_client]` is now actually reassigned when the chunk array didn't
+  exist yet (previous `Object.defineProperty` call was a no-op — passed the array itself as the
+  descriptor instead of assigning the property).
+* version bumped to `4.2.3-zop` and the production bundle was regenerated.
+
 ## 4.2.2-zop (2026-07-18)
 
 ### Bug Fixes
