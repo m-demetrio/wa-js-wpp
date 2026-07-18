@@ -1,6 +1,6 @@
 {
   "name": "@wppconnect/wa-js",
-  "version": "4.2.3-zop",
+  "version": "4.2.4-zop",
   "description": "WPPConnect/WA-JS is an open-source project with the aim of exporting functions from WhatsApp Web",
   "license": "Apache-2.0",
   "author": {

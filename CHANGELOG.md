@@ -1,3 +1,19 @@
+## 4.2.4-zop (2026-07-18)
+
+### Bug Fixes
+
+* `injectLoader()` no longer throws when `webpackChunkwhatsapp_web_client` exists as a
+  non-writable property (or is otherwise incompatible) — current WhatsApp Web builds mostly run
+  on the Meta/Haste module system (`__d`/`require`), not classic webpack, so this array may not
+  behave like a plain array at all. An uncaught throw here previously aborted the whole entry
+  module (`injectLoader()` runs at the top of `src/index.ts`), which meant `self.WPP = ...`
+  (webpack's own bootstrap, which only runs after the entry module finishes) never executed —
+  `window.WPP` silently never existed, even though the `<script onload>` event still fired
+  normally. Both the reattachment (`global[chunkName] = chunk`) and the priming `chunk.push(...)`
+  are now wrapped in `try/catch` so a failure here can't take down the whole bundle; the `metaTimer`
+  fallback still gets its chance either way.
+* version bumped to `4.2.4-zop` and the production bundle was regenerated.
+
 ## 4.2.3-zop (2026-07-18)
 
 ### Bug Fixes

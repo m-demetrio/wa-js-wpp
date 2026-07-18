@@ -172,7 +172,17 @@ export function injectLoader(): void {
   // reprocessando as entradas existentes (inclusive a que empurramos abaixo via `chunk.push`).
   // Sem essa atribuição, `chunk.push(...)` mais abaixo só afeta o array local, nunca chega no
   // runtime real do webpack quando `webpackChunk*` não existia ainda nesse momento.
-  global[chunkName] = chunk;
+  // REGRESSÃO EVITADA: `global[chunkName]` já pode existir como propriedade NÃO-GRAVÁVEL (é assim
+  // que o runtime real do webpack costuma instalar esse array) — atribuir direto lançaria
+  // `TypeError` em modo estrito, abortando `injectLoader()` (chamado no TOPO de `src/index.ts`,
+  // então o erro derruba o bundle inteiro ANTES de `self.WPP=` no final — `window.WPP` nunca
+  // existe, silencioso pro `<script onload>`). `try/catch`: se já existir e não puder reatribuir,
+  // segue com `chunk` só local (mesmo comportamento de antes desta correção).
+  try {
+    if (global[chunkName] !== chunk) global[chunkName] = chunk;
+  } catch (_e) {
+    /* propriedade não-gravável — segue com `chunk` local, sem quebrar a injeção inteira */
+  }
 
   // BUGFIX (ver docs/WA-JS-INJECTION.md §4 no projeto ZapOrganic Pro): esse bloco setava
   // `loaderType = 'webpack'` só por `chunk.length > 0` — antes de qualquer captura REAL de
@@ -252,16 +262,28 @@ export function injectLoader(): void {
     await internalEv.emitAsync('webpack.full_ready').catch(() => null);
   };
 
-  const id = Date.now();
-  chunk.push([
-    [id],
-    {},
-    (__webpack_require__: any) => {
-      webpackRequire = __webpack_require__;
+  // Blindado: WhatsApp Web atual não usa mais webpack clássico pra esse array (usa Meta/Haste —
+  // `__d`/`require`, ver `metaTimer` acima), então `webpackChunkwhatsapp_web_client` pode nem
+  // existir mais como array de verdade, ou existir num formato inesperado. Um `chunk.push` que
+  // lance aqui derrubaria `injectLoader()` inteiro (chamado no TOPO do bundle, em `src/index.ts`)
+  // — e como o bootstrap do webpack (`self.WPP=...`) só roda DEPOIS que o módulo de entrada
+  // termina de executar, essa exceção impediria `window.WPP` de existir de vez, silenciosamente
+  // pro `<script onload>` do content script. Esse `try/catch` garante que, mesmo se esse caminho
+  // (irrelevante em builds só-Meta) falhar, o `metaTimer` ainda tem chance de assumir.
+  try {
+    const id = Date.now();
+    chunk.push([
+      [id],
+      {},
+      (__webpack_require__: any) => {
+        webpackRequire = __webpack_require__;
 
-      queueMicrotask(() => injectFunction(__webpack_require__));
-    },
-  ]);
+        queueMicrotask(() => injectFunction(__webpack_require__));
+      },
+    ]);
+  } catch (_e) {
+    /* array de chunk ausente/incompatível — segue só pelo caminho meta (metaTimer) */
+  }
 }
 
 const sourceModuleMap = new Map<string, boolean>();

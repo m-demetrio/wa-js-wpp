@@ -45,6 +45,16 @@ These fixes stabilize sending flows for new contacts or contacts migrated to LID
   it didn't already exist (the prior code called `Object.defineProperty` with the array itself as
   the descriptor, which does not assign the property) — `global[chunkName] = chunk` now runs
   unconditionally so the later `chunk.push(...)` reaches the real webpack runtime once it loads.
+- **`global[chunkName] = chunk` (added by the previous fix above) could itself throw and kill the
+  whole bundle**: current WhatsApp Web mostly runs on the Meta/Haste module system, not classic
+  webpack, so `webpackChunkwhatsapp_web_client` may exist as a non-writable/incompatible property
+  rather than a plain mutable array. A plain assignment to a non-writable property throws in
+  strict mode — and since `injectLoader()` runs at the very top of `src/index.ts` (the bundle's
+  entry module), an uncaught throw there aborts the entire module before it finishes evaluating,
+  so webpack's own `self.WPP = <entry exports>` bootstrap (which only runs after the entry module
+  returns) never executes. `window.WPP` silently never exists, even though the `<script onload>`
+  event still fires normally (load/error events reflect network fetch, not runtime exceptions).
+  Both the reattachment and the priming `chunk.push(...)` are now wrapped in `try/catch`.
 
 ## Usage notes
 
