@@ -15,13 +15,9 @@
  */
 
 import { assertWid } from '../../assert';
-import { isWhatsAppVersionGTE } from '../../conn/functions';
 import { WPPError } from '../../util';
 import { ApiContact, ContactModel } from '../../whatsapp';
-import {
-  saveContactAction,
-  saveContactActionV2,
-} from '../../whatsapp/functions';
+import { saveContactActionV2 } from '../../whatsapp/functions';
 import { get } from './get';
 
 /**
@@ -75,7 +71,7 @@ export async function save(
   const phoneNumber =
     wid.server === 'c.us'
       ? wid.user
-      : alternateWid.server === 'c.us'
+      : alternateWid?.server === 'c.us'
         ? alternateWid.user
         : null;
 
@@ -84,36 +80,23 @@ export async function save(
 
   const lastName = options?.lastName ?? options?.surname ?? '';
 
-  // Version >= 2.3000.1030209354 uses object parameter API
-  if (isWhatsAppVersionGTE('2.3000.1030209354')) {
-    await saveContactActionV2({
-      phoneNumber,
-      prevPhoneNumber: null,
-      lid,
-      username: null,
-      firstName,
-      lastName,
-      syncToAddressbook,
-    });
-  } else {
-    if (!phoneNumber) {
-      throw new WPPError(
-        'invalid_contact_id_for_legacy_version',
-        'For WhatsApp versions below 2.3000.1030209354, only phone number contacts are supported'
-      );
-    }
+  // BUGFIX (ver BUGFIXES.md "contact.save não sincroniza com o telefone"): a ação nativa
+  // `WAWebSaveContactAction.saveContactAction` (WhatsApp Web atual) só aceita um OBJETO — não
+  // existe mais suporte a argumentos posicionais. `saveContactActionV2` e o antigo
+  // `saveContactAction` resolvem pro MESMO binding nativo (ver whatsapp/functions/
+  // saveContactAction.ts), então o branch por versão abaixo estava sempre errado pra quem caía no
+  // "legado": a função nativa recebia uma STRING (o 1º argumento posicional) no lugar do objeto,
+  // `e.phoneNumber` saía `undefined`, e ela caía no branch `add_username` (sem sincronizar o
+  // telefone) — sem lançar erro. Sempre usar a forma objeto elimina esse branch quebrado.
+  await saveContactActionV2({
+    phoneNumber,
+    prevPhoneNumber: null,
+    lid,
+    username: null,
+    firstName,
+    lastName,
+    syncToAddressbook,
+  });
 
-    // Version < 2.3000.1030209354 uses positional parameters
-    // saveContactAction(phoneNumber, prevPhoneNumber, lid, username, firstName, lastName, syncToAddressbook)
-    await saveContactAction(
-      phoneNumber,
-      null,
-      null,
-      null,
-      firstName,
-      lastName,
-      syncToAddressbook
-    );
-  }
   return await get(contactId);
 }

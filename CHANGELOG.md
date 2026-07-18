@@ -1,3 +1,15 @@
+## 4.2.2-zop (2026-07-18)
+
+### Bug Fixes
+
+* `contact.save()` now syncs new/updated contacts to the phone's address book. The version-based
+  branch that called the native `WAWebSaveContactAction` action with positional arguments was
+  removed — the native action only accepts an object today, so that branch silently produced
+  contacts that never reached the phone. Always uses the object form (`saveContactActionV2`) now.
+* hardened `alternateWid?.server` access in `contact.save()` (was unguarded, could throw for
+  LID-only contacts with no cached phone-number mapping).
+* version bumped to `4.2.2-zop` and the production bundle was regenerated.
+
 ## 4.2.0-zop (2026-05-15)
 
 ### Bug Fixes

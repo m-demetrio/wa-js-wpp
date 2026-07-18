@@ -14,6 +14,17 @@ These fixes stabilize sending flows for new contacts or contacts migrated to LID
 - **Resilient open and forward flows**: UI-facing functions like opening a chat, jumping to a message, starting from the first unread message, and forwarding messages also use the helper. They accept plain numbers or classic WIDs without duplication or `Invalid wid`.
 - **Unread item normalization**: `chat.unread_count_changed` events now deduplicate by chat `_serialized`, and open-chat functions accept `ChatModel`, `Wid`, or a plain number, preventing errors when clicking unread notifications after a contact migrates to LID.
 - **Internal module recovery**: module lookup heuristics for auth, network, and stream were widened to handle `default` exports or alternate names when the bundle is updated.
+- **`contact.save()` did not sync to the phone's address book**: the version-branch in
+  `contact/functions/save.ts` called the native `WAWebSaveContactAction` action with positional
+  arguments for "legacy" WhatsApp Web versions. The current native action only accepts a single
+  object parameter (`saveContactActionV2` and the old `saveContactAction` name resolve to the
+  exact same native binding) — when the positional branch ran, the native function received a
+  bare string instead of an object, so every property read as `undefined` and it silently fell
+  into the username-only save path (creates/updates the local contact but never pushes it to the
+  phone). Fixed by always calling `saveContactActionV2` with the object form, removing the
+  version check and the dead positional branch entirely. Also hardened `alternateWid?.server`
+  (was an unguarded property access that could throw for LID-only contacts with no cached
+  phone-number mapping).
 
 ## Usage notes
 
