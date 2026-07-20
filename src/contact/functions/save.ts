@@ -16,9 +16,10 @@
 
 import { assertWid } from '../../assert';
 import { WPPError } from '../../util';
-import { ApiContact, ContactModel } from '../../whatsapp';
+import { ContactModel } from '../../whatsapp';
 import { saveContactActionV2 } from '../../whatsapp/functions';
 import { get } from './get';
+import { getPnLidEntry, InvalidWidForGetPnLidEntry } from './getPnLidEntry';
 
 /**
  * Create new or update a contact in the device
@@ -60,20 +61,25 @@ export async function save(
   }
 
   const wid = assertWid(contactId);
-  const alternateWid = ApiContact.getAlternateUserWid(wid);
 
-  const lid = wid.isLid()
-    ? wid.user
-    : alternateWid?.isLid()
-      ? alternateWid.user
-      : null;
+  // BUGFIX (ver BUGFIXES.md "contact.save não sincroniza com o telefone" §2): resolver lid/
+  // phoneNumber só pelo cache local (ApiContact.getAlternateUserWid/lidPnCache) falha em silêncio
+  // quando o mapeamento ainda não chegou no dispositivo (comum pra contatos @lid recém-vistos).
+  // saveContactActionV2 recebe phoneNumber undefined e a ação nativa cai no branch que só salva
+  // localmente, sem sincronizar. getPnLidEntry já faz cache-first com fallback de servidor
+  // (queryExists) nos dois sentidos — usar ela aqui em vez da resolução síncrona.
+  let lid: string | null = null;
+  let phoneNumber: string | null = null;
 
-  const phoneNumber =
-    wid.server === 'c.us'
-      ? wid.user
-      : alternateWid?.server === 'c.us'
-        ? alternateWid.user
-        : null;
+  try {
+    const entry = await getPnLidEntry(wid);
+    lid = entry.lid?.id ?? null;
+    phoneNumber = entry.phoneNumber?.id ?? null;
+  } catch (error) {
+    if (!(error instanceof InvalidWidForGetPnLidEntry)) {
+      throw error;
+    }
+  }
 
   const syncToAddressbook =
     options?.syncAddressBook ?? options?.syncAdressBook ?? true;

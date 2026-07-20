@@ -1,3 +1,21 @@
+## 4.2.5-zop (2026-07-20)
+
+### Bug Fixes
+
+* `contact.save()` still did not sync to the phone's address book even after 4.2.2-zop fixed the
+  positional-argument branch: `phoneNumber`/`lid` resolution in `contact/functions/save.ts` used
+  `ApiContact.getAlternateUserWid`/`lidPnCache`, which only reads the LID↔phoneNumber mapping from
+  local device cache — no server fallback. For contacts recently migrated to `@lid` whose mapping
+  hadn't reached this device yet, resolution silently returned `null` for `phoneNumber`; the native
+  action then took the username-only branch (saves locally, never syncs to the phone) with no
+  error. `save()` now resolves via `getPnLidEntry()` (cache-first, falls back to `queryExists()`
+  against the server) instead of the synchronous cache-only lookup.
+* `getPnLidEntry()` itself had the same gap in the `@lid` direction: given a `@lid` id, it only
+  checked `lidPnCache.getPhoneNumber()` (local cache) with no fallback, unlike the `@c.us` branch
+  which already called `queryExists()` on a cache miss. Added the matching server fallback so both
+  directions (`@c.us`→lid and `@lid`→phoneNumber) behave the same way.
+* version bumped to `4.2.5-zop` and the production bundle was regenerated.
+
 ## 4.2.4-zop (2026-07-18)
 
 ### Bug Fixes

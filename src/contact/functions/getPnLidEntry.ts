@@ -86,6 +86,20 @@ export async function getPnLidEntry(
   if (wid.isLid()) {
     lid = wid;
     pn = lidPnCache.getPhoneNumber(wid) || undefined;
+
+    // If no phone number found locally, query the server to get it
+    if (!pn) {
+      debug(`PN not found in cache for ${wid.toString()}, querying server...`);
+      const queryResult = await queryExists(wid);
+      if (queryResult?.wid) {
+        pn = queryResult.wid;
+        debug(`PN retrieved from server: ${pn.toString()}`);
+      } else {
+        debug(`No PN returned from server for ${wid.toString()}`);
+      }
+    } else {
+      debug(`PN found in cache: ${pn.toString()}`);
+    }
   } else if (wid.server === 'c.us') {
     pn = wid;
     lid = lidPnCache.getCurrentLid(wid) || undefined;
