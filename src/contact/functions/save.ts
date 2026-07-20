@@ -70,11 +70,15 @@ export async function save(
   // (queryExists) nos dois sentidos — usar ela aqui em vez da resolução síncrona.
   let lid: string | null = null;
   let phoneNumber: string | null = null;
+  let isExistingContact = false;
 
   try {
     const entry = await getPnLidEntry(wid);
-    lid = entry.lid?.id ?? null;
+    // lid vai serializado (`<digits>@lid`), não só o `.id` (dígitos) — a ação nativa foi testada e
+    // confirmada funcionando com a forma serializada; não confirmamos que aceita a forma curta.
+    lid = entry.lid?._serialized ?? null;
     phoneNumber = entry.phoneNumber?.id ?? null;
+    isExistingContact = entry.contact?.type === 'in';
   } catch (error) {
     if (!(error instanceof InvalidWidForGetPnLidEntry)) {
       throw error;
@@ -94,14 +98,24 @@ export async function save(
   // "legado": a função nativa recebia uma STRING (o 1º argumento posicional) no lugar do objeto,
   // `e.phoneNumber` saía `undefined`, e ela caía no branch `add_username` (sem sincronizar o
   // telefone) — sem lançar erro. Sempre usar a forma objeto elimina esse branch quebrado.
+  //
+  // BUGFIX #2 (ver BUGFIXES.md, mesma investigação): `isConvertingContactType`/`isExistingContact`
+  // NÃO faziam parte do payload nem da interface `SaveContactActionParamsV2` — mas a ação nativa
+  // desestrutura `isConvertingContactType` junto com `firstName`/`lastName` logo no topo do corpo
+  // da função (capturado via DevTools, ver BUGFIXES.md), sinal de que ela participa da lógica de
+  // roteamento antes mesmo do branch phoneNumber/username. Passar sempre explícito
+  // (`isConvertingContactType: false`) em vez de deixar `undefined` evita depender de como a nativa
+  // trata "campo ausente" nesse ponto.
   await saveContactActionV2({
     phoneNumber,
     prevPhoneNumber: null,
     lid,
-    username: null,
+    username: undefined,
     firstName,
     lastName,
     syncToAddressbook,
+    isExistingContact,
+    isConvertingContactType: false,
   });
 
   return await get(contactId);

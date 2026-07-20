@@ -1,3 +1,20 @@
+## 4.2.6-zop (2026-07-20)
+
+### Bug Fixes
+
+* `contact.save()` still did not sync after 4.2.5-zop fixed `phoneNumber` resolution — testado ao
+  vivo, `WPP.contact.save()` salvou local mas não sincronizou com o telefone. Comparando o payload
+  que `save()` monta com o payload já comprovado (bypass manual `saveContactActionV2` direto) achei
+  duas diferenças reais: (1) `lid` ia como `<digits>` (`lid.user`), o bypass testado usa a forma
+  serializada `<digits>@lid`; (2) `isConvertingContactType`/`isExistingContact` nunca eram
+  enviados — nem faziam parte da interface `SaveContactActionParamsV2` — mas a captura via
+  DevTools da ação nativa (`BUGFIXES.md`) mostra que ela desestrutura `isConvertingContactType`
+  junto com `firstName`/`lastName` logo no início do corpo, sinal de que participa do roteamento
+  interno antes mesmo do branch `phoneNumber`. `save()` agora envia `lid` serializado e
+  `isConvertingContactType: false`/`isExistingContact` (deduzido de `ContactModel.type === 'in'`)
+  sempre explícitos, igual ao payload que já sincronizou ao vivo.
+* version bumped to `4.2.6-zop` and the production bundle was regenerated.
+
 ## 4.2.5-zop (2026-07-20)
 
 ### Bug Fixes

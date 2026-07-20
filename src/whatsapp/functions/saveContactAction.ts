@@ -50,6 +50,8 @@ export interface SaveContactActionParamsV2 {
   firstName: string;
   lastName: string;
   syncToAddressbook?: boolean;
+  isExistingContact?: boolean;
+  isConvertingContactType?: boolean;
 }
 
 /**

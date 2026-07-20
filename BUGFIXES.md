@@ -14,6 +14,18 @@ These fixes stabilize sending flows for new contacts or contacts migrated to LID
 - **Resilient open and forward flows**: UI-facing functions like opening a chat, jumping to a message, starting from the first unread message, and forwarding messages also use the helper. They accept plain numbers or classic WIDs without duplication or `Invalid wid`.
 - **Unread item normalization**: `chat.unread_count_changed` events now deduplicate by chat `_serialized`, and open-chat functions accept `ChatModel`, `Wid`, or a plain number, preventing errors when clicking unread notifications after a contact migrates to LID.
 - **Internal module recovery**: module lookup heuristics for auth, network, and stream were widened to handle `default` exports or alternate names when the bundle is updated.
+- **`contact.save()` STILL did not sync after the 4.2.5-zop fix (phoneNumber resolution)**: tested
+  live, `WPP.contact.save()` saved locally but the phone still didn't get it. Diffing the payload
+  `save()` builds against the already-proven-working manual bypass (`saveContactActionV2` called
+  direct with the exact same fields) found two real gaps: (1) `lid` went as bare digits
+  (`lid.user`), the proven bypass uses the serialized form (`<digits>@lid`); (2)
+  `isConvertingContactType`/`isExistingContact` were never sent — not even part of the
+  `SaveContactActionParamsV2` interface — but the native action's captured source (DevTools) shows
+  it destructures `isConvertingContactType` together with `firstName`/`lastName` right at the top
+  of the function body, suggesting it gates internal routing before the `phoneNumber` branch even
+  runs. `save()` now sends serialized `lid` and always-explicit
+  `isConvertingContactType: false`/`isExistingContact` (derived from `ContactModel.type === 'in'`),
+  matching the payload that already synced live.
 - **`contact.save()` still did not sync to the phone's address book after the fix below (4.2.5-zop)**:
   the version-branch fix removed the broken positional-argument call, but `phoneNumber`/`lid`
   resolution still used `ApiContact.getAlternateUserWid`/`lidPnCache` directly — cache-only, no
