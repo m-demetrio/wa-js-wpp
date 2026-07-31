@@ -91,6 +91,57 @@ export const fallbackModules: { [key: string]: any } = {};
 const waitMainInit = internalEv.waitFor('conn.main_init');
 const waitMainReady = internalEv.waitFor('conn.main_ready');
 
+/**
+ * Espera o grafo de módulos do WhatsApp estabilizar antes de emitir
+ * `webpack.injected`.
+ *
+ * Em carga fria (cache vazio) o WhatsApp registra módulos progressivamente
+ * conforme os chunks chegam da rede. `global.__d`/`global.require` passam a
+ * existir MUITO antes do conjunto de módulos estar completo — emitir
+ * `webpack.injected` nesse instante roda todos os callbacks de `onInjected()`
+ * (`registerNewMessageEvent`, `registerAckMessageEvent`, `registerStreamEvent`,
+ * ...) contra um `modulesMap` ainda pela metade.
+ *
+ * O efeito é permanente, não transitório: os bindings de `exportModule` são
+ * getters que se AUTO-CONGELAM em `undefined` na primeira falha de busca
+ * (`Object.defineProperty(this, name, { get: () => undefined })`). Um
+ * `MsgStore.on(...)` que rode cedo demais não registra listener nenhum e nunca
+ * mais tenta — daí a enxurrada de "Module X was not found" e os eventos mudos.
+ *
+ * Portado de wppconnect-team/wa-js#3499 (upstream, `src/loader/index.ts`).
+ * Custo: ~750ms só em carga fria.
+ */
+async function waitForMetaModulesSettle({
+  quiet = 750,
+  timeout = 20_000,
+  poll = 100,
+}: { quiet?: number; timeout?: number; poll?: number } = {}): Promise<void> {
+  const moduleCount = (): number => {
+    try {
+      return Object.keys(__debug().modulesMap).length;
+    } catch {
+      return 0;
+    }
+  };
+
+  const deadline = Date.now() + timeout;
+  let last = moduleCount();
+  let lastChangeAt = Date.now();
+
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, poll));
+    const current = moduleCount();
+    if (current !== last) {
+      last = current;
+      lastChangeAt = Date.now();
+    } else if (current > 0 && Date.now() - lastChangeAt >= quiet) {
+      debug(`meta modules settled at ${current} (quiet ${quiet}ms)`);
+      return;
+    }
+  }
+  debug(`meta modules settle timed out after ${timeout}ms (count ${last})`);
+}
+
 export function injectLoader(): void {
   if (isInjected) {
     return;
@@ -139,6 +190,11 @@ export function injectLoader(): void {
         return result;
       },
     });
+
+    // Carga fria (#3499): só avisa os consumidores depois que o conjunto de
+    // módulos parar de crescer — senão `onInjected()` roda contra um
+    // `modulesMap` incompleto e congela bindings em `undefined` pra sempre.
+    await waitForMetaModulesSettle();
 
     isInjected = true;
     debug('injected');

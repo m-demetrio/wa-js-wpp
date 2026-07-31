@@ -53,8 +53,21 @@ export declare class MsgCollection extends BaseCollection<MsgModel> {
   markAllAsStale(): any;
 }
 
+/**
+ * WhatsApp Web >= 2.3000.1044096409 stopped exporting the `MsgCollectionImpl`
+ * class; only the singleton instance (`MsgCollection`) is exported now. Falling
+ * back to the singleton's constructor keeps the class binding alive.
+ *
+ * This binding is load-bearing beyond this file: `MsgStore` (stores.ts) is
+ * matched with `(m.default || m.MsgCollection) instanceof collections.MsgCollection`,
+ * so an undefined class here makes the `instanceof` throw and `MsgStore` resolve
+ * to undefined as well — which silently kills every `MsgStore.on(...)` listener
+ * (`chat.new_message`, `chat.msg_ack_change`, revoke, edited, orders).
+ */
 exportModule(
   exports,
-  { MsgCollection: 'MsgCollectionImpl' },
-  (m) => m.MsgCollectionImpl
+  { MsgCollection: ['MsgCollectionImpl', 'MsgCollection.constructor'] },
+  (m) =>
+    m.MsgCollectionImpl ||
+    typeof m.MsgCollection?.processMultipleMessages === 'function'
 );

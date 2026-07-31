@@ -6,6 +6,35 @@ These fixes stabilize sending flows for new contacts or contacts migrated to LID
 
 ## Applied changes
 
+- **`MsgCollectionImpl` export removed by WhatsApp Web >= 2.3000.1044096409, silently killing every
+  message event (4.2.7-zop)**: WhatsApp stopped exporting the `MsgCollectionImpl` class from the
+  module — only the singleton instance (`MsgCollection`) is exported now. Our binding matched on
+  `(m) => m.MsgCollectionImpl`, so `collections.MsgCollection` resolved to `undefined`. The damage
+  cascades: `MsgStore` (stores.ts) is matched with
+  `(m.default || m.MsgCollection) instanceof collections.MsgCollection`, and `instanceof undefined`
+  throws, so `MsgStore` resolved to `undefined` too — matching the two console errors seen live
+  (`Module MsgCollection was not found with e=>e.MsgCollectionImpl` and
+  `Module MsgStore was not found with e=>(e.default||e[r])instanceof s[r]`).
+  Because `exportModule` getters **self-freeze** on first failure
+  (`Object.defineProperty(this, name, { get: () => undefined })`), every `MsgStore.on(...)`
+  registration silently no-ops forever: `chat.new_message`, `chat.msg_ack_change`, revoke, edited,
+  live location and order events all go mute, while sending itself keeps working (it awaits the
+  promise returned by `addAndSendMsgToChat`, which never touches `MsgStore`). Measured live on
+  2.3000.1044201690: two messages sent, **zero** events in 15s. Fixed by accepting the singleton's
+  constructor as a fallback — property `['MsgCollectionImpl', 'MsgCollection.constructor']`, finder
+  `m.MsgCollectionImpl || typeof m.MsgCollection?.processMultipleMessages === 'function'`.
+  Ported from upstream wppconnect-team/wa-js#3500. After the fix the same test produced 6 events,
+  with ack progressing 1 -> 2 -> 4.
+- **`webpack.injected` fired before the Meta module graph settled, freezing bindings at `undefined`
+  (4.2.7-zop)**: on cold load WhatsApp registers modules progressively as chunks arrive, but
+  `global.__d`/`global.require` exist long before the set is complete. The meta path emitted
+  `webpack.injected` the instant it saw those globals, so every `onInjected()` callback ran against
+  a half-populated `modulesMap`. Combined with the self-freezing getters described above this makes
+  the failure permanent rather than transient — a module that simply hadn't loaded yet gets cached
+  as "not found" forever. Fixed by `waitForMetaModulesSettle()`: polls the module count every 100ms
+  and proceeds after a 750ms quiet window, with a hard 20s timeout. Ported from upstream
+  wppconnect-team/wa-js#3499 (same root cause upstream hit with `registerStreamEvent`, issues
+  #3419 / #3481). Cost: ~750ms on cold start only.
 - **Chat ID normalization**: any numeric or suffixed identifier (`@c.us`, `@g.us`, `@lid`) is converted to a `Wid` before fetching or creating the chat. This prevents `Invalid wid` errors and avoids duplicate chats for the same contact.
 - **LID resolution before storage writes**: whenever a chat belongs to a user, the LID is resolved or reused from the contact to keep storage aligned with WhatsApp Web and avoid "Chat not found" during message sends or label updates.
 - **Safe chat creation fallback**: operations that need a chat, such as media sending, archive, pin, mark read/recording, and labels, go through the centralized `ensureChat` helper. Existing chats are reused and a new one is created only when required.
