@@ -32,5 +32,11 @@ exportModule(
   },
   (m) =>
     m.getHistorySyncProgressModel || // @whatsapp >= 2.2402.2
-    (m.getHistorySyncProgress && !m.getHistorySyncLogDetailsString)
+    // @whatsapp >= 2.3000.104x o WAWebGetHistorySyncProgress passou a exportar um
+    // getHistorySyncProgress novo: async, recebe o model e devolve so o numero.
+    // Ele casava com esta perna e roubava o modulo do model. Esse modulo novo
+    // exporta unicamente a funcao, entao exigir o model aqui o descarta.
+    (m.getHistorySyncProgress &&
+      !m.getHistorySyncLogDetailsString &&
+      !!m.HistorySyncProgressModel)
 );
