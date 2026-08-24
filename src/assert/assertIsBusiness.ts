@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
+import { getMyUserWid } from '../conn/functions/getMyUserWid';
 import { WPPError } from '../util';
-import { Conn } from '../whatsapp';
+import { ContactStore } from '../whatsapp';
 
 export class NotIsBusinessError extends WPPError {
   constructor() {
@@ -24,7 +25,13 @@ export class NotIsBusinessError extends WPPError {
 }
 
 export function assertIsBusiness(): void {
-  if (!Conn.isSMB) {
+  // Conn.isSMB deixou de existir no WhatsApp Web (>= 2.3000.104x): o Conn real so
+  // expoe smbTos, que e o aceite de termos do SMB e nao o tipo da conta. O sinal
+  // confiavel e o isBusiness do proprio contato logado, populado pelo servidor.
+  const me = getMyUserWid();
+  const isBusiness = me ? ContactStore.get(me)?.isBusiness : undefined;
+
+  if (!isBusiness) {
     throw new NotIsBusinessError();
   }
 }
