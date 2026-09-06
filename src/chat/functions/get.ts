@@ -15,7 +15,9 @@
  */
 
 import { assertWid } from '../../assert';
-import { ChatModel, ChatStore, NewsletterStore, Wid } from '../../whatsapp';
+import type { ChatModel, Wid } from '../../whatsapp';
+import { ChatStore, NewsletterStore } from '../../whatsapp';
+import { findChatByContactPhone, getWidCandidates } from '../helpers';
 
 /**
  * Find a chat by id
@@ -26,7 +28,28 @@ export function get(chatId: string | Wid): ChatModel | undefined {
   const wid = assertWid(chatId);
   if (wid.server === 'newsletter') {
     return NewsletterStore.get(wid);
-  } else {
-    return ChatStore.get(wid);
   }
+
+  const directChat = ChatStore.get(wid);
+  if (directChat) {
+    return directChat;
+  }
+
+  for (const candidate of getWidCandidates(wid)) {
+    if (candidate.equals(wid)) {
+      continue;
+    }
+
+    const chat = ChatStore.get(candidate);
+    if (chat) {
+      return chat;
+    }
+  }
+
+  const chatByPhone = findChatByContactPhone(wid);
+  if (chatByPhone) {
+    return chatByPhone;
+  }
+
+  return undefined;
 }

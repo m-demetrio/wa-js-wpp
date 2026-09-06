@@ -131,7 +131,15 @@ export async function list(
   // Getting The Chat to start from.
   // Searching for chat (index) here, so it gets applied after all filtering.
   const indexChat = options?.id ? get(options.id) : null;
-  const startIndex = indexChat ? models.indexOf(indexChat as any) : 0;
+  let startIndex = indexChat ? models.indexOf(indexChat as any) : 0;
+
+  if (indexChat && startIndex < 0) {
+    startIndex = models.findIndex((chat) => chat.id?.equals?.(indexChat.id));
+  }
+
+  if (startIndex < 0) {
+    startIndex = 0;
+  }
 
   if (direction === 'before') {
     const fixStartIndex = startIndex - count < 0 ? 0 : startIndex - count;
