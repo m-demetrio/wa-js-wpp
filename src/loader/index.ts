@@ -327,10 +327,18 @@ export function injectLoader(): void {
   const chunkName = 'webpackChunkwhatsapp_web_client';
 
   const chunk = global[chunkName] || [];
-  if (!chunk || chunk?.length === 0) {
-    Object.defineProperty(global, chunkName, chunk);
-  } else {
-    loaderType = 'webpack';
+  // zop (BUGFIXES.md): o upstream faz `Object.defineProperty(global, chunkName, chunk)` passando
+  // o array como DESCRIPTOR — isso trava `webpackChunkwhatsapp_web_client` como `undefined`
+  // NÃO-GRAVÁVEL/NÃO-CONFIGURÁVEL. Nos builds Meta/Haste do WhatsApp (>= 2.3000.104x) o próprio
+  // WhatsApp toca essa global depois → `TypeError` → a página inteira fica BRANCA. Aqui só
+  // reatribui o array (guardado em try/catch caso a prop já seja não-gravável) e NÃO seta
+  // `loaderType='webpack'` no else — isso disparava cedo demais e matava o caminho `meta`
+  // (`setupMetaLoaderWatcher`), que é o único que funciona nesses builds. `loaderType` fica pro
+  // `injectFunction` real (webpack) ou pro `runMetaLoader` (meta).
+  try {
+    if (global[chunkName] !== chunk) global[chunkName] = chunk;
+  } catch (_e) {
+    /* prop não-gravável — segue com `chunk` só local */
   }
 
   const injectFunction = async (__webpack_require__: any) => {
@@ -400,16 +408,24 @@ export function injectLoader(): void {
     await internalEv.emitAsync('loader.full_ready').catch(() => null);
   };
 
-  const id = Date.now();
-  chunk.push([
-    [id],
-    {},
-    (__webpack_require__: any) => {
-      moduleRequire = __webpack_require__;
+  // zop (BUGFIXES.md): nos builds só-Meta o `webpackChunkwhatsapp_web_client` pode não ser um
+  // array de verdade — `chunk.push` lançaria e derrubaria `injectLoader()` inteiro (chamado no
+  // topo do bundle), impedindo `self.WPP = ...` → `window.WPP` nunca existe. Guardado: se falhar,
+  // o caminho `meta` (`setupMetaLoaderWatcher`/`runMetaLoader`) assume.
+  try {
+    const id = Date.now();
+    chunk.push([
+      [id],
+      {},
+      (__webpack_require__: any) => {
+        moduleRequire = __webpack_require__;
 
-      queueMicrotask(() => injectFunction(__webpack_require__));
-    },
-  ]);
+        queueMicrotask(() => injectFunction(__webpack_require__));
+      },
+    ]);
+  } catch (_e) {
+    /* array ausente/incompatível — segue pelo caminho meta */
+  }
 }
 
 const sourceModuleMap = new Map<string, boolean>();
