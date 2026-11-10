@@ -169,9 +169,19 @@ export async function queryExists(
     syncQuery
       .withUser(syncUser)
       .withBusinessProtocol()
-      .withDisappearingModeProtocol()
-      .withStatusProtocol()
-      .withLidProtocol();
+      .withDisappearingModeProtocol();
+
+    // WhatsApp Web 2.3000.1053903555 renamed withStatusProtocol to withTextStatusProtocol.
+    // Calling the old name threw, the error fell into the catch below and every number came
+    // back as "does not exist" (the app showed "Sem WhatsApp" for all contacts).
+    const query = syncQuery as any;
+    if (typeof query.withTextStatusProtocol === 'function') {
+      query.withTextStatusProtocol();
+    } else if (typeof query.withStatusProtocol === 'function') {
+      query.withStatusProtocol();
+    }
+
+    syncQuery.withLidProtocol();
 
     let response: unknown;
     try {
@@ -221,6 +231,7 @@ export async function queryExists(
             t?: number;
           };
           status?: unknown;
+          text_status?: { text?: unknown };
           lid?: unknown;
           contact?: {
             type?: string;
@@ -257,7 +268,12 @@ export async function queryExists(
               settingTimestamp: entry.disappearing_mode?.t ?? 0,
             }
           : undefined,
-      status: typeof entry.status === 'string' ? entry.status : undefined,
+      status:
+        typeof entry.status === 'string'
+          ? entry.status
+          : typeof entry.text_status?.text === 'string'
+            ? entry.text_status.text
+            : undefined,
       lid: lid ?? undefined,
     };
 
